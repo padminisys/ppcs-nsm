@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nsm
+  namespace: nsm
+  labels:
+    app: nsm
+    managed-by: github-actions
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nsm
+  template:
+    metadata:
+      labels:
+        app: nsm
+    spec:
+      serviceAccountName: nsm-sa
+      containers:
+      - name: nsm
+        image: ghcr.io/OWNER/REPO:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: QUARKUS_PROFILE
+          value: "prod"
+        - name: QUARKUS_KUBERNETES_CLIENT_TRUST_CERTS
+          value: "true"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
