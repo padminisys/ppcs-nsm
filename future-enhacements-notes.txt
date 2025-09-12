@@ -1,0 +1,12 @@
+Currently We are accepting api payload request that includes ns as well 
+but in future we should not ask for ns as user details are already coming in auth header
+from auth header retrive user details and then lookup in our db which ns is mapped against user.
+ns is equal to entity.
+so a user may be attached to multiple entity.
+so besides auth header a entity/ns details will be coming in payload so as defence layer , we should build mechnism to verify it by hitting db before honoring request.
+As of now direct honoring is enabled.
+
+
+---
+
+when you create a namespace with in that namespace

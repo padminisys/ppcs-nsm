@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-httpd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: busybox-httpd
+      serial: GB7YH
+      access: restricted
+  template:
+    metadata:
+      labels:
+        app: busybox-httpd
+        serial: GB7YH
+        access: restricted
+    spec:
+      containers:
+      - name: busybox-httpd
+        image: busybox
+        command: ["httpd", "-f", "-v", "-p", "80"]

@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: busybox-httpd-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: busybox.padmini.systems
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: busybox-httpd-svc
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - busybox.padmini.systems
+      secretName: busybox-httpd-cert

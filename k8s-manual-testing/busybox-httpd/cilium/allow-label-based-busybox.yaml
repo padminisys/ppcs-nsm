@@ -1,0 +1,21 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-busybox-ingress
+  namespace: satish-kaushik-t45d6
+spec:
+  # This selector is more specific and only matches your Nginx pods
+  endpointSelector:
+    matchLabels:
+      serial: GB7YH
+#      app: nginx
+  # This rule allows ingress traffic from any source to port 80/TCP
+  ingress:
+  - fromEntities:
+    - all
+    toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      - port: "443"
+        protocol: TCP        

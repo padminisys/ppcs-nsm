@@ -1,0 +1,33 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: restricted-namespaces-policy
+  annotations:
+    description: >
+      Deny all ingress/egress for restricted namespaces except DNS and ingress controller traffic.
+    io.cilium.policy.priority: "100"
+  labels:
+    policy-type: restricted-access
+    team: platform-security
+    visibility: restricted
+spec:
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.access: restricted
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app.kubernetes.io/name: ingress-nginx
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        app.kubernetes.io/name: ingress-nginx
+  - toEntities:
+    - world
+    - cluster
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: TCP
+      - port: "53"
+        protocol: UDP
