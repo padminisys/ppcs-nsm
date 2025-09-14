@@ -7,6 +7,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 import java.util.List;
 import java.util.Map;
@@ -103,19 +113,74 @@ public class CiliumNetworkPolicyRequest {
     }
 
     /**
+     * Custom validation annotation for NetworkRule.
+     */
+    @Documented
+    @Constraint(validatedBy = NetworkRuleValidator.class)
+    @Target({ElementType.TYPE})
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface ValidNetworkRule {
+        String message() default "NetworkRule must have either IP addresses or labels, but not both";
+        Class<?>[] groups() default {};
+        Class<? extends Payload>[] payload() default {};
+    }
+
+    /**
+     * Validator for NetworkRule.
+     */
+    public static class NetworkRuleValidator implements ConstraintValidator<ValidNetworkRule, NetworkRule> {
+        @Override
+        public boolean isValid(NetworkRule rule, ConstraintValidatorContext context) {
+            if (rule == null) {
+                return true; // Let @NotNull handle null validation
+            }
+
+            boolean hasIpAddresses = rule.getIpAddresses() != null && !rule.getIpAddresses().isEmpty();
+            boolean hasFromLabels = rule.getFromLabels() != null && !rule.getFromLabels().isEmpty();
+            boolean hasToLabels = rule.getToLabels() != null && !rule.getToLabels().isEmpty();
+            boolean hasLabels = hasFromLabels || hasToLabels;
+
+            // Must have either IP addresses or labels, but not both
+            boolean isValid = (hasIpAddresses && !hasLabels) || (!hasIpAddresses && hasLabels);
+
+            if (!isValid) {
+                context.disableDefaultConstraintViolation();
+                if (!hasIpAddresses && !hasLabels) {
+                    context.buildConstraintViolationWithTemplate(
+                        "NetworkRule must specify either IP addresses or labels")
+                        .addConstraintViolation();
+                } else if (hasIpAddresses && hasLabels) {
+                    context.buildConstraintViolationWithTemplate(
+                        "NetworkRule cannot have both IP addresses and labels")
+                        .addConstraintViolation();
+                }
+            }
+
+            return isValid;
+        }
+    }
+
+    /**
      * Represents a network rule for ingress or egress traffic.
+     * Supports both IP-based (CIDR) and label-based (fromEndpoints/toEndpoints) matching.
      */
     @RegisterForReflection
+    @ValidNetworkRule
     public static class NetworkRule {
 
         @NotNull(message = "Rule type cannot be null")
         @JsonProperty("ruleType")
         private RuleType ruleType;
 
-        @NotEmpty(message = "IP addresses cannot be empty")
         @JsonProperty("ipAddresses")
-        private List<@Pattern(regexp = "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$", 
+        private List<@Pattern(regexp = "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
                               message = "Invalid CIDR format") String> ipAddresses;
+
+        @JsonProperty("fromLabels")
+        private Map<String, String> fromLabels;
+
+        @JsonProperty("toLabels")
+        private Map<String, String> toLabels;
 
         @JsonProperty("ports")
         private List<@Valid PortRule> ports;
@@ -139,6 +204,22 @@ public class CiliumNetworkPolicyRequest {
             this.ipAddresses = ipAddresses;
         }
 
+        public Map<String, String> getFromLabels() {
+            return fromLabels;
+        }
+
+        public void setFromLabels(Map<String, String> fromLabels) {
+            this.fromLabels = fromLabels;
+        }
+
+        public Map<String, String> getToLabels() {
+            return toLabels;
+        }
+
+        public void setToLabels(Map<String, String> toLabels) {
+            this.toLabels = toLabels;
+        }
+
         public List<PortRule> getPorts() {
             return ports;
         }
@@ -147,11 +228,14 @@ public class CiliumNetworkPolicyRequest {
             this.ports = ports;
         }
 
+
         @Override
         public String toString() {
             return "NetworkRule{" +
                     "ruleType=" + ruleType +
                     ", ipAddresses=" + ipAddresses +
+                    ", fromLabels=" + fromLabels +
+                    ", toLabels=" + toLabels +
                     ", ports=" + ports +
                     '}';
         }

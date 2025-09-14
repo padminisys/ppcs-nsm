@@ -10,7 +10,7 @@ spec:
   ingress:
     - fromEndpoints:
       - matchLabels:
-          app: my-frontend
+          serial: GB7YH
           k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
       toPorts:
       - ports:

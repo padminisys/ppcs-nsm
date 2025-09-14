@@ -33,6 +33,7 @@ public class KubernetesService {
     private static final Logger LOG = Logger.getLogger(KubernetesService.class);
     private static final String CILIUM_API_VERSION = "cilium.io/v2";
     private static final String CILIUM_KIND = "CiliumNetworkPolicy";
+    private static final String NAMESPACE_LABEL_KEY = "k8s:io.kubernetes.pod.namespace";
     private static final Random RANDOM = new Random();
 
     @Inject
@@ -307,7 +308,7 @@ public class KubernetesService {
         // Process ingress rules
         if (request.getIngressRules() != null && !request.getIngressRules().isEmpty()) {
             List<Map<String, Object>> ingressRules = request.getIngressRules().stream()
-                    .map(this::convertToIngressRule)
+                    .map(rule -> convertToIngressRule(rule, request.getNamespace()))
                     .collect(Collectors.toList());
             spec.put("ingress", ingressRules);
         }
@@ -315,7 +316,7 @@ public class KubernetesService {
         // Process ingress deny rules
         if (request.getIngressDenyRules() != null && !request.getIngressDenyRules().isEmpty()) {
             List<Map<String, Object>> ingressDenyRules = request.getIngressDenyRules().stream()
-                    .map(this::convertToIngressRule)
+                    .map(rule -> convertToIngressRule(rule, request.getNamespace()))
                     .collect(Collectors.toList());
             spec.put("ingressDeny", ingressDenyRules);
         }
@@ -323,7 +324,7 @@ public class KubernetesService {
         // Process egress rules
         if (request.getEgressRules() != null && !request.getEgressRules().isEmpty()) {
             List<Map<String, Object>> egressRules = request.getEgressRules().stream()
-                    .map(this::convertToEgressRule)
+                    .map(rule -> convertToEgressRule(rule, request.getNamespace()))
                     .collect(Collectors.toList());
             spec.put("egress", egressRules);
         }
@@ -331,7 +332,7 @@ public class KubernetesService {
         // Process egress deny rules
         if (request.getEgressDenyRules() != null && !request.getEgressDenyRules().isEmpty()) {
             List<Map<String, Object>> egressDenyRules = request.getEgressDenyRules().stream()
-                    .map(this::convertToEgressRule)
+                    .map(rule -> convertToEgressRule(rule, request.getNamespace()))
                     .collect(Collectors.toList());
             spec.put("egressDeny", egressDenyRules);
         }
@@ -355,14 +356,32 @@ public class KubernetesService {
      * Converts a NetworkRule to an ingress rule map.
      *
      * @param rule the network rule
+     * @param namespace the namespace for automatic constraint
      * @return map representing the ingress rule
      */
-    private Map<String, Object> convertToIngressRule(CiliumNetworkPolicyRequest.NetworkRule rule) {
+    private Map<String, Object> convertToIngressRule(CiliumNetworkPolicyRequest.NetworkRule rule, String namespace) {
         Map<String, Object> ingressRule = new HashMap<>();
         
-        // Add fromCIDR
+        // Add fromCIDR for IP-based rules
         if (rule.getIpAddresses() != null && !rule.getIpAddresses().isEmpty()) {
             ingressRule.put("fromCIDR", rule.getIpAddresses());
+        }
+        
+        // Add fromEndpoints for label-based rules
+        if (rule.getFromLabels() != null && !rule.getFromLabels().isEmpty()) {
+            List<Map<String, Object>> fromEndpoints = new ArrayList<>();
+            Map<String, Object> endpointSelector = new HashMap<>();
+            Map<String, Object> matchLabels = new HashMap<>();
+            
+            // Add user-provided labels
+            rule.getFromLabels().forEach(matchLabels::put);
+            
+            // Automatically add namespace constraint
+            matchLabels.put(NAMESPACE_LABEL_KEY, namespace);
+            
+            endpointSelector.put("matchLabels", matchLabels);
+            fromEndpoints.add(endpointSelector);
+            ingressRule.put("fromEndpoints", fromEndpoints);
         }
 
         // Add toPorts if specified
@@ -386,14 +405,32 @@ public class KubernetesService {
      * Converts a NetworkRule to an egress rule map.
      *
      * @param rule the network rule
+     * @param namespace the namespace for automatic constraint
      * @return map representing the egress rule
      */
-    private Map<String, Object> convertToEgressRule(CiliumNetworkPolicyRequest.NetworkRule rule) {
+    private Map<String, Object> convertToEgressRule(CiliumNetworkPolicyRequest.NetworkRule rule, String namespace) {
         Map<String, Object> egressRule = new HashMap<>();
         
-        // Add toCIDR
+        // Add toCIDR for IP-based rules
         if (rule.getIpAddresses() != null && !rule.getIpAddresses().isEmpty()) {
             egressRule.put("toCIDR", rule.getIpAddresses());
+        }
+        
+        // Add toEndpoints for label-based rules
+        if (rule.getToLabels() != null && !rule.getToLabels().isEmpty()) {
+            List<Map<String, Object>> toEndpoints = new ArrayList<>();
+            Map<String, Object> endpointSelector = new HashMap<>();
+            Map<String, Object> matchLabels = new HashMap<>();
+            
+            // Add user-provided labels
+            rule.getToLabels().forEach(matchLabels::put);
+            
+            // Automatically add namespace constraint
+            matchLabels.put(NAMESPACE_LABEL_KEY, namespace);
+            
+            endpointSelector.put("matchLabels", matchLabels);
+            toEndpoints.add(endpointSelector);
+            egressRule.put("toEndpoints", toEndpoints);
         }
 
         // Add toPorts if specified

@@ -27,6 +27,9 @@ The API accepts a JSON payload with the following structure:
     {
       "ruleType": "INGRESS_ALLOW",
       "ipAddresses": ["CIDR notation"],
+      "fromLabels": {
+        "key": "value"
+      },
       "ports": [
         {
           "protocol": "TCP|UDP",
@@ -37,10 +40,25 @@ The API accepts a JSON payload with the following structure:
     }
   ],
   "ingressDenyRules": [...],
-  "egressRules": [...],
+  "egressRules": [
+    {
+      "ruleType": "EGRESS_ALLOW",
+      "ipAddresses": ["CIDR notation"],
+      "toLabels": {
+        "key": "value"
+      },
+      "ports": [...]
+    }
+  ],
   "egressDenyRules": [...]
 }
 ```
+
+**Important Notes:**
+- Each rule must specify **either** `ipAddresses` **or** labels (`fromLabels`/`toLabels`), but not both
+- For ingress rules, use `fromLabels` to match source pods by labels
+- For egress rules, use `toLabels` to match destination pods by labels
+- The API automatically adds `k8s:io.kubernetes.pod.namespace: <namespace>` to all label selectors for security
 
 ## Examples
 

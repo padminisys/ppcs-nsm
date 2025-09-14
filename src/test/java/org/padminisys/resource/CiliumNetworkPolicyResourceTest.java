@@ -213,6 +213,118 @@ class CiliumNetworkPolicyResourceTest {
                 .body("message", equalTo("CiliumNetworkPolicy service cannot connect to Kubernetes"));
     }
 
+    @Test
+    void testCreateCiliumNetworkPolicy_WithFromLabels_Success() {
+        // Given
+        CiliumNetworkPolicyResponse mockResponse = new CiliumNetworkPolicyResponse(
+                "gb7yp-abc123",
+                "test-namespace",
+                "CREATED",
+                Instant.now(),
+                "CiliumNetworkPolicy created successfully",
+                "gb7yp-abc123"
+        );
+
+        when(kubernetesService.createCiliumNetworkPolicy(any(CiliumNetworkPolicyRequest.class)))
+                .thenReturn(mockResponse);
+
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body(createLabelBasedRequest())
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(201)
+                .body("name", equalTo("gb7yp-abc123"))
+                .body("namespace", equalTo("test-namespace"))
+                .body("status", equalTo("CREATED"));
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_MixedIPAndLabels_Success() {
+        // Given
+        CiliumNetworkPolicyResponse mockResponse = new CiliumNetworkPolicyResponse(
+                "mixed-policy-abc123",
+                "test-namespace",
+                "CREATED",
+                Instant.now(),
+                "CiliumNetworkPolicy created successfully",
+                "mixed-policy-abc123"
+        );
+
+        when(kubernetesService.createCiliumNetworkPolicy(any(CiliumNetworkPolicyRequest.class)))
+                .thenReturn(mockResponse);
+
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body(createMixedRequest())
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(201)
+                .body("status", equalTo("CREATED"));
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_InvalidRequest_BothIPAndLabels() {
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                    {
+                        "namespace": "test-namespace",
+                        "labels": {
+                            "tenant": "dell_computers"
+                        },
+                        "ingressRules": [
+                            {
+                                "ruleType": "INGRESS_ALLOW",
+                                "ipAddresses": ["203.0.113.10/32"],
+                                "fromLabels": {
+                                    "serial": "GB7YH"
+                                }
+                            }
+                        ]
+                    }
+                    """)
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_InvalidRequest_NoIPOrLabels() {
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                    {
+                        "namespace": "test-namespace",
+                        "labels": {
+                            "tenant": "dell_computers"
+                        },
+                        "ingressRules": [
+                            {
+                                "ruleType": "INGRESS_ALLOW",
+                                "ports": [
+                                    {
+                                        "protocol": "TCP",
+                                        "port": 80
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    """)
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(400);
+    }
+
     private String createValidRequest() {
         return """
             {
@@ -256,6 +368,80 @@ class CiliumNetworkPolicyResourceTest {
                     {
                         "ruleType": "EGRESS_DENY",
                         "ipAddresses": ["203.0.113.30/32"]
+                    }
+                ]
+            }
+            """;
+    }
+
+    private String createLabelBasedRequest() {
+        return """
+            {
+                "namespace": "test-namespace",
+                "labels": {
+                    "serial": "GB7YP"
+                },
+                "ingressRules": [
+                    {
+                        "ruleType": "INGRESS_ALLOW",
+                        "fromLabels": {
+                            "serial": "GB7YH"
+                        },
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 80
+                            }
+                        ]
+                    }
+                ]
+            }
+            """;
+    }
+
+    private String createMixedRequest() {
+        return """
+            {
+                "namespace": "test-namespace",
+                "labels": {
+                    "tenant": "mixed_policy"
+                },
+                "ingressRules": [
+                    {
+                        "ruleType": "INGRESS_ALLOW",
+                        "ipAddresses": ["203.0.113.10/32"],
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 443
+                            }
+                        ]
+                    },
+                    {
+                        "ruleType": "INGRESS_ALLOW",
+                        "fromLabels": {
+                            "serial": "GB7YH"
+                        },
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 80
+                            }
+                        ]
+                    }
+                ],
+                "egressRules": [
+                    {
+                        "ruleType": "EGRESS_ALLOW",
+                        "toLabels": {
+                            "service": "database"
+                        },
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 5432
+                            }
+                        ]
                     }
                 ]
             }
