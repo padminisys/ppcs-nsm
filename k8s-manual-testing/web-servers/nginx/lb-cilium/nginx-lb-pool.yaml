@@ -1,0 +1,11 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: public-vip
+spec:
+  blocks:
+    - cidr: "188.68.62.169/32"
+  serviceSelector:
+    matchLabels:
+      "io.kubernetes.service.name": "nginx-lb"
+      "io.kubernetes.service.namespace": "satish-kaushik-t45d6"

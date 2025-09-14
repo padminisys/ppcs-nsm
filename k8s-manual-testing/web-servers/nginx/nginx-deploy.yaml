@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+  namespace: satish-kaushik-t45d6
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+      serial: GB7YP
+  template:
+    metadata:
+      labels:
+        app: nginx
+        serial: GB7YP        
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: psys-centos-1
+      containers:
+      - image: nginx
+        name: nginx

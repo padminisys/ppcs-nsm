@@ -1,0 +1,20 @@
+- Create loadbalancer Type Public or Private 
+  Public with type Load Balancer - Public External IP
+  Private with type Private Load Balancer Cluster IP
+
+
+- 1 LB with nginx ingress controller with service type loadbalancer
+  internal routing for all 443 80 from ingress
+
+nginx ingress controller
+ns based cert issuer 
+
+
+
+if you are using apisix gateway
+then apisix ingress controller
+
+
+
+
+
