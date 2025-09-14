@@ -1,0 +1,19 @@
+{
+  "namespace": "satish-kaushik-t45d6",
+  "labels": {
+    "serial": "GB7YP"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "ipAddresses": ["45.248.67.9/32"],
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "endPort": 0
+        }
+      ]
+    }
+  ]
+}
