@@ -1,0 +1,24 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: gb7yp-9meitm
+  namespace: satish-kaushik-t45d6
+spec:
+  endpointSelector:
+    matchLabels:
+      serial: GB7YP
+  ingress:
+    - fromCIDR:
+      - 45.248.67.9/32
+      toPorts:
+      - ports:
+        - port: "80"
+          protocol: TCP
+    - fromEndpoints:
+      - matchLabels:
+          serial: GB7YH
+          k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
+      toPorts:
+      - ports:
+        - port: "80"
+          protocol: TCP

@@ -17,4 +17,5 @@ then apisix ingress controller
 
 
 
-
+10-0-0-203.satish-kaushik-t45d6.pod.cluster.local
+nginx-lb.satish-kaushik-t45d6.svc.cluster.local
