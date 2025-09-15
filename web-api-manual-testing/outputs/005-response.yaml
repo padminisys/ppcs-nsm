@@ -1,0 +1,45 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  creationTimestamp: "2025-09-14T23:56:10Z"
+  generation: 1
+  labels:
+    created-by: ppcs-nsm
+    managed-by: quarkus-app
+  name: gb7yh-7tmo8e
+  namespace: satish-kaushik-t45d6
+  resourceVersion: "17635460"
+  uid: 456b3c48-5b98-4338-a32a-17af7d58c5a5
+spec:
+  egress:
+  - toCIDR:
+    - 45.248.67.9/32
+    toPorts:
+    - ports:
+      - endPort: 0
+        port: "80"
+        protocol: TCP
+      - endPort: 0
+        port: "443"
+        protocol: TCP
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
+        serial: GB7YP
+    toPorts:
+    - ports:
+      - endPort: 0
+        port: "80"
+        protocol: TCP
+      - endPort: 0
+        port: "443"
+        protocol: TCP
+  endpointSelector:
+    matchLabels:
+      serial: GB7YH
+status:
+  conditions:
+  - lastTransitionTime: "2025-09-14T23:56:10Z"
+    message: Policy validation succeeded
+    status: "True"
+    type: Valid

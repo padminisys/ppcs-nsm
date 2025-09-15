@@ -1,0 +1,55 @@
+{
+  "namespace": "satish-kaushik-t45d6",
+  "labels": {
+    "serial": "GB7YH"
+  },
+  "egressRules": [
+    {
+      "ruleType": "EGRESS_ALLOW",
+      "ipAddresses": ["45.248.67.9/32"],
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "endPort": 0
+        },
+        {
+          "protocol": "TCP",
+          "port": 443,
+          "endPort": 0
+        }
+      ]
+    },
+    {
+      "ruleType": "EGRESS_ALLOW",
+      "toLabels": {
+        "serial": "GB7YP"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "endPort": 0
+        },
+        {
+          "protocol": "TCP",
+          "port": 443,
+          "endPort": 0
+        }
+      ]
+    }
+  ],
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "ipAddresses": ["45.248.67.9/32"],
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "endPort": 0
+        }
+      ]
+    }
+  ]
+}
