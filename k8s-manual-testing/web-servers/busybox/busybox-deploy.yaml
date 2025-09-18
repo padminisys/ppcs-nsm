@@ -16,6 +16,8 @@ spec:
         serial: GB7YH
         access: restricted
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: psys-centos-1
       containers:
       - name: busybox-httpd
         image: busybox
