@@ -1,0 +1,21 @@
+{
+  "namespace": "satish-kaushik-t45d6",
+  "labels": {
+    "padmini.systems/tenant-resource-type": "ingress"
+  },
+  "egressRules": [
+    {
+      "ruleType": "EGRESS_ALLOW",
+      "toLabels": {
+        "serial": "GB7YH"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "endPort": 0
+        }
+      ]
+    }
+  ]
+}
