@@ -7,7 +7,7 @@
     {
       "ruleType": "EGRESS_ALLOW",
       "toLabels": {
-        "serial": "GB7YH"
+        "serial": "GB7YP"
       },
       "ports": [
         {

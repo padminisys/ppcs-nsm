@@ -6,11 +6,16 @@
   "ingressRules": [
     {
       "ruleType": "INGRESS_ALLOW",
-      "ipAddresses": ["45.248.67.9/32"],
+      "ipAddresses": ["0.0.0.0/0"],
       "ports": [
         {
           "protocol": "TCP",
           "port": 443,
+          "endPort": 0
+        },
+        {
+          "protocol": "TCP",
+          "port": 80,
           "endPort": 0
         }
       ]
