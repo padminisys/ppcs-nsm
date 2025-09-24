@@ -1,0 +1,27 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  labels:
+    created-by: ppcs-nsm
+    managed-by: quarkus-app
+  name: gb7yp-nlq2qa
+  namespace: satish-kaushik-t45d6
+spec:
+  endpointSelector:
+    matchLabels:
+      serial: GB7YP
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
+        padmini.systems/tenant-resource-type: ingress
+    toPorts:
+    - ports:
+      - endPort: 0
+        port: "80"
+        protocol: TCP
+      rules:
+        http:
+        - headerMatches:
+          - name: "x-real-ip"
+            value: "45.248.67.9"

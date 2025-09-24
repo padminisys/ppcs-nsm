@@ -1,0 +1,32 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  creationTimestamp: "2025-09-24T16:44:19Z"
+  generation: 1
+  labels:
+    created-by: ppcs-nsm
+    managed-by: quarkus-app
+  name: gb7yp-nlq2qa
+  namespace: satish-kaushik-t45d6
+  resourceVersion: "21065492"
+  uid: 57ad01c0-b741-4328-a2ae-1edad38b409a
+spec:
+  endpointSelector:
+    matchLabels:
+      serial: GB7YP
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
+        padmini.systems/tenant-resource-type: ingress
+    toPorts:
+    - ports:
+      - endPort: 0
+        port: "80"
+        protocol: TCP
+status:
+  conditions:
+  - lastTransitionTime: "2025-09-24T16:44:19Z"
+    message: Policy validation succeeded
+    status: "True"
+    type: Valid
