@@ -68,17 +68,25 @@ public class ServiceAccountResource {
         try {
             ServiceAccountResponse response = kubernetesService.createServiceAccount(request);
             
+            if (response == null) {
+                LOG.errorf("Service returned null response for service account: %s in namespace: %s",
+                          request.getName(), request.getNamespace());
+                return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                        .entity(new ErrorResponse("Failed to create service account: Service returned null response"))
+                        .build();
+            }
+            
             if ("CREATED".equals(response.getStatus())) {
                 return Response.status(Response.Status.CREATED).entity(response).build();
             } else {
                 return Response.ok(response).build();
             }
         } catch (RuntimeException e) {
-            LOG.errorf(e, "Error creating service account: %s in namespace: %s", 
+            LOG.errorf(e, "Error creating service account: %s in namespace: %s",
                       request.getName(), request.getNamespace());
             
             // Check if it's a namespace not found error
-            if (e.getMessage().contains("does not exist")) {
+            if (e.getMessage() != null && e.getMessage().contains("does not exist")) {
                 return Response.status(Response.Status.BAD_REQUEST)
                         .entity(new ErrorResponse(e.getMessage()))
                         .build();
@@ -88,7 +96,7 @@ public class ServiceAccountResource {
                     .entity(new ErrorResponse("Failed to create service account: " + e.getMessage()))
                     .build();
         } catch (Exception e) {
-            LOG.errorf(e, "Unexpected error creating service account: %s in namespace: %s", 
+            LOG.errorf(e, "Unexpected error creating service account: %s in namespace: %s",
                       request.getName(), request.getNamespace());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(new ErrorResponse("Failed to create service account: " + e.getMessage()))
@@ -100,10 +108,10 @@ public class ServiceAccountResource {
      * Simple error response DTO
      */
     public static class ErrorResponse {
-        public String error;
+        public String message;
 
-        public ErrorResponse(String error) {
-            this.error = error;
+        public ErrorResponse(String message) {
+            this.message = message;
         }
     }
 }

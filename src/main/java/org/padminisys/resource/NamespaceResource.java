@@ -67,6 +67,13 @@ public class NamespaceResource {
         try {
             NamespaceResponse response = kubernetesService.createNamespace(request);
             
+            if (response == null) {
+                LOG.errorf("Service returned null response for namespace: %s", request.getName());
+                return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                        .entity(new ErrorResponse("Failed to create namespace: Service returned null response"))
+                        .build();
+            }
+            
             if ("CREATED".equals(response.getStatus())) {
                 return Response.status(Response.Status.CREATED).entity(response).build();
             } else {
@@ -112,10 +119,10 @@ public class NamespaceResource {
      * Simple error response DTO
      */
     public static class ErrorResponse {
-        public String error;
+        public String message;
 
-        public ErrorResponse(String error) {
-            this.error = error;
+        public ErrorResponse(String message) {
+            this.message = message;
         }
     }
 

@@ -2,6 +2,7 @@ package org.padminisys.exception;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
@@ -28,11 +29,15 @@ public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
             return handleValidationException((ConstraintViolationException) exception);
         }
 
+        if (exception instanceof WebApplicationException) {
+            return handleWebApplicationException((WebApplicationException) exception);
+        }
+
         if (exception instanceof IllegalArgumentException) {
             return handleBadRequestException(exception);
         }
 
-        if (exception instanceof RuntimeException && exception.getMessage().contains("does not exist")) {
+        if (exception instanceof RuntimeException && exception.getMessage() != null && exception.getMessage().contains("does not exist")) {
             return handleBadRequestException(exception);
         }
 
@@ -71,10 +76,45 @@ public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
                 .build();
     }
 
+    private Response handleWebApplicationException(WebApplicationException exception) {
+        // Handle JSON parsing errors and other client errors
+        int statusCode = exception.getResponse().getStatus();
+        String message = exception.getMessage();
+        
+        if (statusCode >= 400 && statusCode < 500) {
+            // Client error - return 400 with appropriate message
+            String errorMessage = "Invalid request";
+            if (message != null && message.contains("JsonParseException")) {
+                errorMessage = "Invalid JSON format";
+            } else if (message != null) {
+                errorMessage = "Bad request: " + message;
+            }
+            
+            ErrorResponse errorResponse = new ErrorResponse(
+                    "BAD_REQUEST",
+                    errorMessage,
+                    Response.Status.BAD_REQUEST.getStatusCode()
+            );
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(errorResponse)
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        } else {
+            // Server error or other status
+            return handleInternalServerError(exception);
+        }
+    }
+
     private Response handleInternalServerError(Exception exception) {
+        String message = exception.getMessage();
+        String errorMessage = "An unexpected error occurred";
+        if (message != null && !message.trim().isEmpty()) {
+            errorMessage += ": " + message;
+        }
+        
         ErrorResponse errorResponse = new ErrorResponse(
                 "INTERNAL_SERVER_ERROR",
-                "An unexpected error occurred: " + exception.getMessage(),
+                errorMessage,
                 Response.Status.INTERNAL_SERVER_ERROR.getStatusCode()
         );
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 /**
  * Request DTO for creating a Kubernetes service account.
@@ -12,13 +13,15 @@ import jakarta.validation.constraints.Pattern;
 public class ServiceAccountRequest {
 
     @NotBlank(message = "Namespace name cannot be blank")
-    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", 
+    @Size(max = 63, message = "Namespace name must not exceed 63 characters")
+    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
              message = "Namespace name must be a valid DNS-1123 label")
     @JsonProperty("namespace")
     private String namespace;
 
     @NotBlank(message = "Service account name cannot be blank")
-    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", 
+    @Size(max = 63, message = "Service account name must not exceed 63 characters")
+    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
              message = "Service account name must be a valid DNS-1123 label")
     @JsonProperty("name")
     private String name;

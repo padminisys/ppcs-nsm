@@ -3,6 +3,7 @@ package org.padminisys.resource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.padminisys.dto.ServiceAccountRequest;
@@ -13,13 +14,22 @@ import java.time.Instant;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @QuarkusTest
 class ServiceAccountResourceTest {
 
     @InjectMock
     KubernetesService kubernetesService;
+
+    @BeforeEach
+    void setUp() {
+        Mockito.reset(kubernetesService);
+    }
 
     @Test
     void testCreateServiceAccountSuccess() {
@@ -46,7 +56,11 @@ class ServiceAccountResourceTest {
                 .body("name", is("test-sa"))
                 .body("namespace", is("test-namespace"))
                 .body("status", is("CREATED"))
-                .body("message", is("Service account created successfully"));
+                .body("message", is("Service account created successfully"))
+                .body("creationTimestamp", notNullValue());
+
+        // Verify service interaction
+        verify(kubernetesService).createServiceAccount(any(ServiceAccountRequest.class));
     }
 
     @Test
@@ -74,7 +88,11 @@ class ServiceAccountResourceTest {
                 .body("name", is("existing-sa"))
                 .body("namespace", is("test-namespace"))
                 .body("status", is("EXISTS"))
-                .body("message", is("Service account already exists"));
+                .body("message", is("Service account already exists"))
+                .body("creationTimestamp", notNullValue());
+
+        // Verify service interaction
+        verify(kubernetesService).createServiceAccount(any(ServiceAccountRequest.class));
     }
 
     @Test
@@ -90,7 +108,11 @@ class ServiceAccountResourceTest {
                 .when()
                 .post("/api/v1/serviceaccounts")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("message", containsString("does not exist"));
+
+        // Verify service interaction
+        verify(kubernetesService).createServiceAccount(any(ServiceAccountRequest.class));
     }
 
     @Test
@@ -103,6 +125,9 @@ class ServiceAccountResourceTest {
                 .post("/api/v1/serviceaccounts")
                 .then()
                 .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
     }
 
     @Test
@@ -115,6 +140,9 @@ class ServiceAccountResourceTest {
                 .post("/api/v1/serviceaccounts")
                 .then()
                 .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
     }
 
     @Test
@@ -127,6 +155,9 @@ class ServiceAccountResourceTest {
                 .post("/api/v1/serviceaccounts")
                 .then()
                 .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
     }
 
     @Test
@@ -139,6 +170,9 @@ class ServiceAccountResourceTest {
                 .post("/api/v1/serviceaccounts")
                 .then()
                 .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
     }
 
     @Test
@@ -154,6 +188,117 @@ class ServiceAccountResourceTest {
                 .when()
                 .post("/api/v1/serviceaccounts")
                 .then()
-                .statusCode(500);
+                .statusCode(500)
+                .body("message", containsString("Failed to create service account"));
+
+        // Verify service interaction
+        verify(kubernetesService).createServiceAccount(any(ServiceAccountRequest.class));
+    }
+
+    @Test
+    void testCreateServiceAccount_InvalidJSON() {
+        // When & Then - Test malformed JSON
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": \"test-namespace\", \"name\": \"test-sa\", invalid}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to JSON parsing failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_MissingFields() {
+        // When & Then - Test missing required fields
+        given()
+                .contentType(ContentType.JSON)
+                .body("{}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_NullFields() {
+        // When & Then - Test null fields
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": null, \"name\": null}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_NamespaceTooLong() {
+        // When & Then - Test namespace name that's too long
+        String longName = "a".repeat(64);
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": \"" + longName + "\", \"name\": \"test-sa\"}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_ServiceAccountNameTooLong() {
+        // When & Then - Test service account name that's too long
+        String longName = "a".repeat(64);
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": \"test-namespace\", \"name\": \"" + longName + "\"}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_NamespaceWithInvalidCharacters() {
+        // When & Then - Test namespace with invalid characters
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": \"test_namespace@123\", \"name\": \"test-sa\"}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
+    }
+
+    @Test
+    void testCreateServiceAccount_ServiceAccountNameWithInvalidCharacters() {
+        // When & Then - Test service account name with invalid characters
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\": \"test-namespace\", \"name\": \"test_sa@123\"}")
+                .when()
+                .post("/api/v1/serviceaccounts")
+                .then()
+                .statusCode(400);
+
+        // Verify service was not called due to validation failure
+        verifyNoInteractions(kubernetesService);
     }
 }
