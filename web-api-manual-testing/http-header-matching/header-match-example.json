@@ -1,0 +1,26 @@
+{
+  "namespace": "satish-kaushik-t45d6",
+  "labels": {
+    "serial": "GB7YP"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "padmini.systems/tenant-resource-type": "ingress"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "x-real-ip",
+              "value": "49.32.194.250"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

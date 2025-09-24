@@ -325,6 +325,138 @@ class CiliumNetworkPolicyResourceTest {
                 .statusCode(400);
     }
 
+    @Test
+    void testCreateCiliumNetworkPolicy_WithHeaderMatches_Success() {
+        // Given
+        CiliumNetworkPolicyResponse mockResponse = new CiliumNetworkPolicyResponse(
+                "header-policy-abc123",
+                "test-namespace",
+                "CREATED",
+                Instant.now(),
+                "CiliumNetworkPolicy created successfully",
+                "header-policy-abc123"
+        );
+
+        when(kubernetesService.createCiliumNetworkPolicy(any(CiliumNetworkPolicyRequest.class)))
+                .thenReturn(mockResponse);
+
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body(createHeaderMatchRequest())
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(201)
+                .body("name", equalTo("header-policy-abc123"))
+                .body("namespace", equalTo("test-namespace"))
+                .body("status", equalTo("CREATED"));
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_WithMultipleHeaderMatches_Success() {
+        // Given
+        CiliumNetworkPolicyResponse mockResponse = new CiliumNetworkPolicyResponse(
+                "multi-header-abc123",
+                "test-namespace",
+                "CREATED",
+                Instant.now(),
+                "CiliumNetworkPolicy created successfully",
+                "multi-header-abc123"
+        );
+
+        when(kubernetesService.createCiliumNetworkPolicy(any(CiliumNetworkPolicyRequest.class)))
+                .thenReturn(mockResponse);
+
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body(createMultipleHeaderMatchRequest())
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(201)
+                .body("status", equalTo("CREATED"));
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_InvalidRequest_EmptyHeaderName() {
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                    {
+                        "namespace": "test-namespace",
+                        "labels": {
+                            "tenant": "test"
+                        },
+                        "ingressRules": [
+                            {
+                                "ruleType": "INGRESS_ALLOW",
+                                "fromLabels": {
+                                    "serial": "GB7YH"
+                                },
+                                "ports": [
+                                    {
+                                        "protocol": "TCP",
+                                        "port": 80,
+                                        "headerMatches": [
+                                            {
+                                                "name": "",
+                                                "value": "45.248.67.9"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    """)
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_InvalidRequest_EmptyHeaderValue() {
+        // When & Then
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                    {
+                        "namespace": "test-namespace",
+                        "labels": {
+                            "tenant": "test"
+                        },
+                        "ingressRules": [
+                            {
+                                "ruleType": "INGRESS_ALLOW",
+                                "fromLabels": {
+                                    "serial": "GB7YH"
+                                },
+                                "ports": [
+                                    {
+                                        "protocol": "TCP",
+                                        "port": 80,
+                                        "headerMatches": [
+                                            {
+                                                "name": "X-Real-IP",
+                                                "value": ""
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    """)
+                .when()
+                .post("/api/v1/cilium-network-policies")
+                .then()
+                .statusCode(400);
+    }
+
     private String createValidRequest() {
         return """
             {
@@ -440,6 +572,72 @@ class CiliumNetworkPolicyResourceTest {
                             {
                                 "protocol": "TCP",
                                 "port": 5432
+                            }
+                        ]
+                    }
+                ]
+            }
+            """;
+    }
+
+    private String createHeaderMatchRequest() {
+        return """
+            {
+                "namespace": "test-namespace",
+                "labels": {
+                    "tenant": "header_policy"
+                },
+                "ingressRules": [
+                    {
+                        "ruleType": "INGRESS_ALLOW",
+                        "fromLabels": {
+                            "padmini.systems/tenant-resource-type": "ingress"
+                        },
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 80,
+                                "headerMatches": [
+                                    {
+                                        "name": "X-Real-IP",
+                                        "value": "45.248.67.9"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+            """;
+    }
+
+    private String createMultipleHeaderMatchRequest() {
+        return """
+            {
+                "namespace": "test-namespace",
+                "labels": {
+                    "tenant": "multi_header"
+                },
+                "ingressRules": [
+                    {
+                        "ruleType": "INGRESS_ALLOW",
+                        "fromLabels": {
+                            "padmini.systems/tenant-resource-type": "ingress"
+                        },
+                        "ports": [
+                            {
+                                "protocol": "TCP",
+                                "port": 80,
+                                "headerMatches": [
+                                    {
+                                        "name": "X-Real-IP",
+                                        "value": "45.248.67.9"
+                                    },
+                                    {
+                                        "name": "X-Forwarded-For",
+                                        "value": "203.0.113.7"
+                                    }
+                                ]
                             }
                         ]
                     }

@@ -34,7 +34,13 @@ The API accepts a JSON payload with the following structure:
         {
           "protocol": "TCP|UDP",
           "port": number,
-          "endPort": number (optional)
+          "endPort": number (optional),
+          "headerMatches": [
+            {
+              "name": "string",
+              "value": "string"
+            }
+          ]
         }
       ]
     }
@@ -435,6 +441,300 @@ curl -X GET http://localhost:8080/api/v1/cilium-network-policies/health
 ```
 
 ## Notes
+- **Namespace must exist** before creating a CiliumNetworkPolicy
+- **Labels are required** and cannot be empty
+- **IP addresses must be in valid CIDR format** (e.g., `192.168.1.1/32`, `0.0.0.0/0`)
+- **Ports must be valid numbers** (1-65535)
+- **EndPort is optional** and used for port ranges
+- **Protocol must be TCP or UDP**
+- **Policy names are automatically generated** and guaranteed to be unique
+- **HTTP header matching is optional** and only works with HTTP/HTTPS traffic
+- **Header names and values must be non-empty strings** and are case-sensitive
+- **Multiple header matches create separate HTTP rules** in the generated policy
+
+
+
+## HTTP Header Matching Examples
+
+The API supports HTTP header matching for advanced traffic filtering. This feature allows you to create policies that match specific HTTP headers in addition to IP addresses and labels.
+
+### 8. Basic HTTP Header Matching
+
+Allow traffic from pods with specific labels, but only if the HTTP request contains a specific header:
+
+```json
+{
+  "namespace": "satish-kaushik-t45d6",
+  "labels": {
+    "serial": "GB7YP"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "padmini.systems/tenant-resource-type": "ingress"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "X-Real-IP",
+              "value": "45.248.67.9"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Generated CiliumNetworkPolicy:**
+```yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: gb7yp-nlq2qa
+  namespace: satish-kaushik-t45d6
+spec:
+  endpointSelector:
+    matchLabels:
+      serial: GB7YP
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: satish-kaushik-t45d6
+        padmini.systems/tenant-resource-type: ingress
+    toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      rules:
+        http:
+        - headerMatches:
+          - name: "X-Real-IP"
+            value: "45.248.67.9"
+```
+
+### 9. Multiple HTTP Header Matches
+
+Allow traffic only when multiple HTTP headers match specific values:
+
+```json
+{
+  "namespace": "production",
+  "labels": {
+    "tenant": "multi_header_policy"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "padmini.systems/tenant-resource-type": "ingress"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "X-Real-IP",
+              "value": "45.248.67.9"
+            },
+            {
+              "name": "X-Forwarded-For",
+              "value": "203.0.113.7"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Generated CiliumNetworkPolicy:**
+```yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: multi-header-policy-abc123
+  namespace: production
+spec:
+  endpointSelector:
+    matchLabels:
+      tenant: multi_header_policy
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: production
+        padmini.systems/tenant-resource-type: ingress
+    toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      rules:
+        http:
+        - headerMatches:
+          - name: "X-Real-IP"
+            value: "45.248.67.9"
+        - headerMatches:
+          - name: "X-Forwarded-For"
+            value: "203.0.113.7"
+```
+
+### 10. HTTP Header Matching with Multiple Ports
+
+Apply header matching to multiple ports:
+
+```json
+{
+  "namespace": "api-gateway",
+  "labels": {
+    "service": "gateway",
+    "version": "v2"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "role": "load-balancer"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "X-Forwarded-Proto",
+              "value": "http"
+            }
+          ]
+        },
+        {
+          "protocol": "TCP",
+          "port": 443,
+          "headerMatches": [
+            {
+              "name": "X-Forwarded-Proto",
+              "value": "https"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 11. Mixed Rules: IP-based and Header-based
+
+Combine IP-based rules with header-based rules in the same policy:
+
+```json
+{
+  "namespace": "hybrid-service",
+  "labels": {
+    "tenant": "mixed_policy"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "ipAddresses": ["203.0.113.10/32"],
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 443
+        }
+      ]
+    },
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "padmini.systems/tenant-resource-type": "ingress"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "X-API-Key",
+              "value": "secret-api-key-123"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 12. Common HTTP Header Matching Use Cases
+
+#### Authentication Headers
+```json
+{
+  "name": "Authorization",
+  "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### API Versioning
+```json
+{
+  "name": "Accept",
+  "value": "application/vnd.api+json;version=2"
+}
+```
+
+#### Content Type Filtering
+```json
+{
+  "name": "Content-Type",
+  "value": "application/json"
+}
+```
+
+#### Custom Headers
+```json
+{
+  "name": "X-Tenant-ID",
+  "value": "tenant-12345"
+}
+```
+
+#### User Agent Filtering
+```json
+{
+  "name": "User-Agent",
+  "value": "MyApp/1.0"
+}
+```
+
+## HTTP Header Matching Features
+
+### Key Features:
+- **Multiple Headers**: Support for multiple header matches in a single port rule
+- **Exact Match**: Headers must match exactly (case-sensitive)
+- **Label Integration**: Works seamlessly with label-based pod selection
+- **Security**: Automatic namespace constraints still apply
+- **Flexibility**: Can be combined with IP-based rules in the same policy
+
+### Important Notes:
+- **HTTP Only**: Header matching only works with HTTP/HTTPS traffic
+- **Exact Match**: Header values must match exactly (no wildcards or regex)
+- **Case Sensitive**: Header names and values are case-sensitive
+- **Multiple Rules**: Each header match creates a separate HTTP rule in the policy
+- **Validation**: Both header name and value must be non-empty strings
+
+### Security Benefits:
+- **Fine-grained Control**: Filter traffic based on application-level headers
+- **API Security**: Validate API keys, tokens, or custom authentication headers
+- **Content Filtering**: Allow only specific content types or API versions
+- **Multi-layer Security**: Combine network-level (IP/labels) with application-level (headers) filtering
 
 - **Namespace must exist** before creating a CiliumNetworkPolicy
 - **Labels are required** and cannot be empty

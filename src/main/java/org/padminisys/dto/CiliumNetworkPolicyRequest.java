@@ -242,7 +242,7 @@ public class CiliumNetworkPolicyRequest {
     }
 
     /**
-     * Represents a port rule with protocol and port range.
+     * Represents a port rule with protocol, port range, and optional HTTP header matching.
      */
     @RegisterForReflection
     public static class PortRule {
@@ -257,6 +257,9 @@ public class CiliumNetworkPolicyRequest {
 
         @JsonProperty("endPort")
         private Integer endPort;
+
+        @JsonProperty("headerMatches")
+        private List<@Valid HeaderMatch> headerMatches;
 
         public PortRule() {
         }
@@ -285,12 +288,68 @@ public class CiliumNetworkPolicyRequest {
             this.endPort = endPort;
         }
 
+        public List<HeaderMatch> getHeaderMatches() {
+            return headerMatches;
+        }
+
+        public void setHeaderMatches(List<HeaderMatch> headerMatches) {
+            this.headerMatches = headerMatches;
+        }
+
         @Override
         public String toString() {
             return "PortRule{" +
                     "protocol=" + protocol +
                     ", port=" + port +
                     ", endPort=" + endPort +
+                    ", headerMatches=" + headerMatches +
+                    '}';
+        }
+    }
+
+    /**
+     * Represents an HTTP header match for network policies.
+     */
+    @RegisterForReflection
+    public static class HeaderMatch {
+
+        @NotBlank(message = "Header name cannot be blank")
+        @JsonProperty("name")
+        private String name;
+
+        @NotBlank(message = "Header value cannot be blank")
+        @JsonProperty("value")
+        private String value;
+
+        public HeaderMatch() {
+        }
+
+        public HeaderMatch(String name, String value) {
+            this.name = name;
+            this.value = value;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return "HeaderMatch{" +
+                    "name='" + name + '\'' +
+                    ", value='" + value + '\'' +
                     '}';
         }
     }

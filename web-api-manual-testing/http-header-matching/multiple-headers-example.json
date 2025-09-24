@@ -1,0 +1,30 @@
+{
+  "namespace": "production",
+  "labels": {
+    "tenant": "multi_header"
+  },
+  "ingressRules": [
+    {
+      "ruleType": "INGRESS_ALLOW",
+      "fromLabels": {
+        "padmini.systems/tenant-resource-type": "ingress"
+      },
+      "ports": [
+        {
+          "protocol": "TCP",
+          "port": 80,
+          "headerMatches": [
+            {
+              "name": "X-Real-IP",
+              "value": "45.248.67.9"
+            },
+            {
+              "name": "X-Forwarded-For",
+              "value": "203.0.113.7"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

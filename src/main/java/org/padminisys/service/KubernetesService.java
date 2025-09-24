@@ -394,6 +394,15 @@ public class KubernetesService {
                     .collect(Collectors.toList());
             
             toPortsEntry.put("ports", ports);
+            
+            // Add HTTP rules if any port has header matches
+            List<Map<String, Object>> httpRules = createHttpRules(rule.getPorts());
+            if (!httpRules.isEmpty()) {
+                Map<String, Object> rules = new HashMap<>();
+                rules.put("http", httpRules);
+                toPortsEntry.put("rules", rules);
+            }
+            
             toPorts.add(toPortsEntry);
             ingressRule.put("toPorts", toPorts);
         }
@@ -443,6 +452,15 @@ public class KubernetesService {
                     .collect(Collectors.toList());
             
             toPortsEntry.put("ports", ports);
+            
+            // Add HTTP rules if any port has header matches
+            List<Map<String, Object>> httpRules = createHttpRules(rule.getPorts());
+            if (!httpRules.isEmpty()) {
+                Map<String, Object> rules = new HashMap<>();
+                rules.put("http", httpRules);
+                toPortsEntry.put("rules", rules);
+            }
+            
             toPorts.add(toPortsEntry);
             egressRule.put("toPorts", toPorts);
         }
@@ -466,6 +484,35 @@ public class KubernetesService {
         }
         
         return port;
+    }
+
+    /**
+     * Creates HTTP rules from port rules that have header matches.
+     *
+     * @param portRules the list of port rules
+     * @return list of HTTP rules
+     */
+    private List<Map<String, Object>> createHttpRules(List<CiliumNetworkPolicyRequest.PortRule> portRules) {
+        List<Map<String, Object>> httpRules = new ArrayList<>();
+        
+        for (CiliumNetworkPolicyRequest.PortRule portRule : portRules) {
+            if (portRule.getHeaderMatches() != null && !portRule.getHeaderMatches().isEmpty()) {
+                for (CiliumNetworkPolicyRequest.HeaderMatch headerMatch : portRule.getHeaderMatches()) {
+                    Map<String, Object> httpRule = new HashMap<>();
+                    List<Map<String, Object>> headerMatches = new ArrayList<>();
+                    
+                    Map<String, Object> headerMatchMap = new HashMap<>();
+                    headerMatchMap.put("name", headerMatch.getName());
+                    headerMatchMap.put("value", headerMatch.getValue());
+                    headerMatches.add(headerMatchMap);
+                    
+                    httpRule.put("headerMatches", headerMatches);
+                    httpRules.add(httpRule);
+                }
+            }
+        }
+        
+        return httpRules;
     }
 
     /**
