@@ -645,4 +645,246 @@ class CiliumNetworkPolicyResourceTest {
             }
             """;
     }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_Success() {
+        // Given
+        CiliumNetworkPolicyRequest mockRequest = createMockPolicyRequest();
+        when(kubernetesService.getCiliumNetworkPolicyByName("gb7yp-md0dy8", "test-namespace"))
+                .thenReturn(mockRequest);
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .get("/api/v1/cilium-network-policies/gb7yp-md0dy8")
+                .then()
+                .statusCode(200)
+                .body("namespace", equalTo("test-namespace"))
+                .body("labels.serial", equalTo("GB7YP"))
+                .body("ingressRules", hasSize(1))
+                .body("ingressRules[0].ruleType", equalTo("INGRESS_ALLOW"))
+                .body("ingressRules[0].fromLabels.'padmini.systems/tenant-resource-type'", equalTo("ingress"))
+                .body("ingressRules[0].ports", hasSize(1))
+                .body("ingressRules[0].ports[0].protocol", equalTo("TCP"))
+                .body("ingressRules[0].ports[0].port", equalTo(80))
+                .body("ingressRules[0].ports[0].headerMatches", hasSize(1))
+                .body("ingressRules[0].ports[0].headerMatches[0].name", equalTo("x-real-ip"))
+                .body("ingressRules[0].ports[0].headerMatches[0].value", equalTo("45.248.67.9"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_NotFound() {
+        // Given
+        when(kubernetesService.getCiliumNetworkPolicyByName("non-existent", "test-namespace"))
+                .thenThrow(new RuntimeException("CiliumNetworkPolicy 'non-existent' not found in namespace 'test-namespace'"));
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .get("/api/v1/cilium-network-policies/non-existent")
+                .then()
+                .statusCode(404)
+                .body("error", containsString("CiliumNetworkPolicy not found"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_MissingNamespaceParam() {
+        // When & Then
+        given()
+                .when()
+                .get("/api/v1/cilium-network-policies/gb7yp-md0dy8")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByNamespace_Success() {
+        // Given
+        List<CiliumNetworkPolicyRequest> mockPolicies = List.of(
+                createMockPolicyRequest(),
+                createMockPolicyRequest2()
+        );
+        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("test-namespace"))
+                .thenReturn(mockPolicies);
+
+        // When & Then
+        given()
+                .when()
+                .get("/api/v1/cilium-network-policies/namespace/test-namespace")
+                .then()
+                .statusCode(200)
+                .body("", hasSize(2))
+                .body("[0].namespace", equalTo("test-namespace"))
+                .body("[0].labels.serial", equalTo("GB7YP"))
+                .body("[1].namespace", equalTo("test-namespace"))
+                .body("[1].labels.serial", equalTo("GB7YH"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByNamespace_EmptyResult() {
+        // Given
+        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("empty-namespace"))
+                .thenReturn(List.of());
+
+        // When & Then
+        given()
+                .when()
+                .get("/api/v1/cilium-network-policies/namespace/empty-namespace")
+                .then()
+                .statusCode(200)
+                .body("", hasSize(0));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByNamespace_NamespaceNotFound() {
+        // Given
+        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("non-existent"))
+                .thenThrow(new RuntimeException("Namespace 'non-existent' does not exist"));
+
+        // When & Then
+        given()
+                .when()
+                .get("/api/v1/cilium-network-policies/namespace/non-existent")
+                .then()
+                .statusCode(404)
+                .body("error", containsString("Namespace not found"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_Success() {
+        // Given
+        List<CiliumNetworkPolicyRequest> mockPolicies = List.of(createMockPolicyRequest());
+        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace", Map.of("serial", "GB7YP")))
+                .thenReturn(mockPolicies);
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .queryParam("labels", "serial=GB7YP")
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(200)
+                .body("", hasSize(1))
+                .body("[0].namespace", equalTo("test-namespace"))
+                .body("[0].labels.serial", equalTo("GB7YP"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_MultipleLabels() {
+        // Given
+        List<CiliumNetworkPolicyRequest> mockPolicies = List.of(createMockPolicyRequest());
+        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace",
+                Map.of("serial", "GB7YP", "environment", "production")))
+                .thenReturn(mockPolicies);
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .queryParam("labels", "serial=GB7YP,environment=production")
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(200)
+                .body("", hasSize(1));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_AllNamespaces() {
+        // Given
+        List<CiliumNetworkPolicyRequest> mockPolicies = List.of(
+                createMockPolicyRequest(),
+                createMockPolicyRequest2()
+        );
+        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector(null, Map.of("serial", "GB7YP")))
+                .thenReturn(mockPolicies);
+
+        // When & Then
+        given()
+                .queryParam("labels", "serial=GB7YP")
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(200)
+                .body("", hasSize(2));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_InvalidLabelsFormat() {
+        // When & Then
+        given()
+                .queryParam("labels", "invalid-format")
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(400)
+                .body("error", containsString("Invalid labels parameter"));
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_MissingLabelsParam() {
+        // When & Then
+        given()
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_EmptyLabelsParam() {
+        // When & Then - Empty string triggers @NotBlank validation
+        given()
+                .queryParam("labels", "")
+                .when()
+                .get("/api/v1/cilium-network-policies/endpoint-selector")
+                .then()
+                .statusCode(400)
+                .body("title", equalTo("Constraint Violation"));
+    }
+
+    private CiliumNetworkPolicyRequest createMockPolicyRequest() {
+        CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
+        request.setNamespace("test-namespace");
+        request.setLabels(Map.of("serial", "GB7YP"));
+        
+        CiliumNetworkPolicyRequest.NetworkRule ingressRule = new CiliumNetworkPolicyRequest.NetworkRule();
+        ingressRule.setRuleType(CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW);
+        ingressRule.setFromLabels(Map.of("padmini.systems/tenant-resource-type", "ingress"));
+        
+        CiliumNetworkPolicyRequest.PortRule portRule = new CiliumNetworkPolicyRequest.PortRule();
+        portRule.setProtocol(CiliumNetworkPolicyRequest.Protocol.TCP);
+        portRule.setPort(80);
+        
+        CiliumNetworkPolicyRequest.HeaderMatch headerMatch = new CiliumNetworkPolicyRequest.HeaderMatch();
+        headerMatch.setName("x-real-ip");
+        headerMatch.setValue("45.248.67.9");
+        portRule.setHeaderMatches(List.of(headerMatch));
+        
+        ingressRule.setPorts(List.of(portRule));
+        request.setIngressRules(List.of(ingressRule));
+        
+        return request;
+    }
+
+    private CiliumNetworkPolicyRequest createMockPolicyRequest2() {
+        CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
+        request.setNamespace("test-namespace");
+        request.setLabels(Map.of("serial", "GB7YH"));
+        
+        CiliumNetworkPolicyRequest.NetworkRule ingressRule = new CiliumNetworkPolicyRequest.NetworkRule();
+        ingressRule.setRuleType(CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW);
+        ingressRule.setFromLabels(Map.of("padmini.systems/tenant-resource-type", "ingress"));
+        
+        CiliumNetworkPolicyRequest.PortRule portRule = new CiliumNetworkPolicyRequest.PortRule();
+        portRule.setProtocol(CiliumNetworkPolicyRequest.Protocol.TCP);
+        portRule.setPort(443);
+        
+        ingressRule.setPorts(List.of(portRule));
+        request.setIngressRules(List.of(ingressRule));
+        
+        return request;
+    }
 }

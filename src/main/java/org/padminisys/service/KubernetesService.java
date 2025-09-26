@@ -529,4 +529,363 @@ public class KubernetesService {
             return false;
         }
     }
+
+    /**
+     * Retrieves a CiliumNetworkPolicy by name and converts it back to the original request format.
+     *
+     * @param name the name of the policy
+     * @param namespace the namespace of the policy
+     * @return the policy converted to request format
+     * @throws RuntimeException if policy is not found or conversion fails
+     */
+    public CiliumNetworkPolicyRequest getCiliumNetworkPolicyByName(String name, String namespace) {
+        LOG.infof("Getting CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
+
+        try {
+            // Check if namespace exists
+            Namespace namespaceObj = kubernetesClient.namespaces()
+                    .withName(namespace)
+                    .get();
+
+            if (namespaceObj == null) {
+                throw new RuntimeException("Namespace '" + namespace + "' does not exist");
+            }
+
+            // Get the policy
+            GenericKubernetesResource policy = kubernetesClient
+                    .genericKubernetesResources(ciliumNetworkPolicyContext)
+                    .inNamespace(namespace)
+                    .withName(name)
+                    .get();
+
+            if (policy == null) {
+                throw new RuntimeException("CiliumNetworkPolicy '" + name + "' not found in namespace '" + namespace + "'");
+            }
+
+            return convertKubernetesCNPToRequest(policy);
+
+        } catch (KubernetesClientException e) {
+            LOG.errorf(e, "Failed to get CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
+            throw new RuntimeException("Failed to get CiliumNetworkPolicy: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Retrieves all CiliumNetworkPolicies in a namespace and converts them back to the original request format.
+     *
+     * @param namespace the namespace to search in
+     * @return list of policies converted to request format
+     * @throws RuntimeException if namespace doesn't exist or retrieval fails
+     */
+    public List<CiliumNetworkPolicyRequest> getCiliumNetworkPoliciesByNamespace(String namespace) {
+        LOG.infof("Getting all CiliumNetworkPolicies in namespace: %s", namespace);
+
+        try {
+            // Check if namespace exists
+            Namespace namespaceObj = kubernetesClient.namespaces()
+                    .withName(namespace)
+                    .get();
+
+            if (namespaceObj == null) {
+                throw new RuntimeException("Namespace '" + namespace + "' does not exist");
+            }
+
+            // Get all policies in the namespace
+            List<GenericKubernetesResource> policies = kubernetesClient
+                    .genericKubernetesResources(ciliumNetworkPolicyContext)
+                    .inNamespace(namespace)
+                    .list()
+                    .getItems();
+
+            return policies.stream()
+                    .map(this::convertKubernetesCNPToRequest)
+                    .collect(Collectors.toList());
+
+        } catch (KubernetesClientException e) {
+            LOG.errorf(e, "Failed to get CiliumNetworkPolicies in namespace: %s", namespace);
+            throw new RuntimeException("Failed to get CiliumNetworkPolicies: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Retrieves CiliumNetworkPolicies by endpoint selector labels and converts them back to the original request format.
+     *
+     * @param namespace the namespace to search in (optional, if null searches all namespaces)
+     * @param endpointLabels the endpoint selector labels to match
+     * @return list of policies converted to request format
+     * @throws RuntimeException if retrieval fails
+     */
+    public List<CiliumNetworkPolicyRequest> getCiliumNetworkPoliciesByEndpointSelector(String namespace, Map<String, String> endpointLabels) {
+        LOG.infof("Getting CiliumNetworkPolicies by endpoint selector labels: %s in namespace: %s", endpointLabels, namespace);
+
+        try {
+            List<GenericKubernetesResource> allPolicies;
+            
+            if (namespace != null && !namespace.trim().isEmpty()) {
+                // Check if namespace exists
+                Namespace namespaceObj = kubernetesClient.namespaces()
+                        .withName(namespace)
+                        .get();
+
+                if (namespaceObj == null) {
+                    throw new RuntimeException("Namespace '" + namespace + "' does not exist");
+                }
+
+                // Get policies from specific namespace
+                allPolicies = kubernetesClient
+                        .genericKubernetesResources(ciliumNetworkPolicyContext)
+                        .inNamespace(namespace)
+                        .list()
+                        .getItems();
+            } else {
+                // Get policies from all namespaces
+                allPolicies = kubernetesClient
+                        .genericKubernetesResources(ciliumNetworkPolicyContext)
+                        .inAnyNamespace()
+                        .list()
+                        .getItems();
+            }
+
+            // Filter policies by endpoint selector labels
+            return allPolicies.stream()
+                    .filter(policy -> matchesEndpointSelector(policy, endpointLabels))
+                    .map(this::convertKubernetesCNPToRequest)
+                    .collect(Collectors.toList());
+
+        } catch (KubernetesClientException e) {
+            LOG.errorf(e, "Failed to get CiliumNetworkPolicies by endpoint selector: %s", endpointLabels);
+            throw new RuntimeException("Failed to get CiliumNetworkPolicies: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Checks if a policy matches the given endpoint selector labels.
+     *
+     * @param policy the Kubernetes CNP resource
+     * @param targetLabels the labels to match against
+     * @return true if the policy's endpoint selector matches the target labels
+     */
+    @SuppressWarnings("unchecked")
+    private boolean matchesEndpointSelector(GenericKubernetesResource policy, Map<String, String> targetLabels) {
+        try {
+            Map<String, Object> spec = (Map<String, Object>) policy.getAdditionalProperties().get("spec");
+            if (spec == null) {
+                return false;
+            }
+
+            Map<String, Object> endpointSelector = (Map<String, Object>) spec.get("endpointSelector");
+            if (endpointSelector == null) {
+                return false;
+            }
+
+            Map<String, Object> matchLabels = (Map<String, Object>) endpointSelector.get("matchLabels");
+            if (matchLabels == null || matchLabels.isEmpty()) {
+                return targetLabels == null || targetLabels.isEmpty();
+            }
+
+            // Check if all target labels match the policy's endpoint selector
+            for (Map.Entry<String, String> targetEntry : targetLabels.entrySet()) {
+                Object policyValue = matchLabels.get(targetEntry.getKey());
+                if (policyValue == null || !policyValue.toString().equals(targetEntry.getValue())) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (Exception e) {
+            LOG.warnf("Error checking endpoint selector match for policy %s: %s",
+                     policy.getMetadata().getName(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Converts a Kubernetes CiliumNetworkPolicy resource back to our API request format.
+     *
+     * @param policy the Kubernetes CNP resource
+     * @return the converted request object
+     */
+    @SuppressWarnings("unchecked")
+    private CiliumNetworkPolicyRequest convertKubernetesCNPToRequest(GenericKubernetesResource policy) {
+        CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
+        
+        // Set namespace
+        request.setNamespace(policy.getMetadata().getNamespace());
+        
+        // Extract spec
+        Map<String, Object> spec = (Map<String, Object>) policy.getAdditionalProperties().get("spec");
+        if (spec == null) {
+            LOG.warnf("Policy %s has no spec", policy.getMetadata().getName());
+            return request;
+        }
+        
+        // Extract endpoint selector labels
+        Map<String, Object> endpointSelector = (Map<String, Object>) spec.get("endpointSelector");
+        if (endpointSelector != null) {
+            Map<String, Object> matchLabels = (Map<String, Object>) endpointSelector.get("matchLabels");
+            if (matchLabels != null) {
+                Map<String, String> labels = new HashMap<>();
+                matchLabels.forEach((key, value) -> labels.put(key, value.toString()));
+                request.setLabels(labels);
+            }
+        }
+        
+        // Convert ingress rules
+        List<Map<String, Object>> ingressRules = (List<Map<String, Object>>) spec.get("ingress");
+        if (ingressRules != null) {
+            request.setIngressRules(convertKubernetesRulesToNetworkRules(ingressRules, CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW));
+        }
+        
+        // Convert ingress deny rules
+        List<Map<String, Object>> ingressDenyRules = (List<Map<String, Object>>) spec.get("ingressDeny");
+        if (ingressDenyRules != null) {
+            request.setIngressDenyRules(convertKubernetesRulesToNetworkRules(ingressDenyRules, CiliumNetworkPolicyRequest.RuleType.INGRESS_DENY));
+        }
+        
+        // Convert egress rules
+        List<Map<String, Object>> egressRules = (List<Map<String, Object>>) spec.get("egress");
+        if (egressRules != null) {
+            request.setEgressRules(convertKubernetesRulesToNetworkRules(egressRules, CiliumNetworkPolicyRequest.RuleType.EGRESS_ALLOW));
+        }
+        
+        // Convert egress deny rules
+        List<Map<String, Object>> egressDenyRules = (List<Map<String, Object>>) spec.get("egressDeny");
+        if (egressDenyRules != null) {
+            request.setEgressDenyRules(convertKubernetesRulesToNetworkRules(egressDenyRules, CiliumNetworkPolicyRequest.RuleType.EGRESS_DENY));
+        }
+        
+        return request;
+    }
+
+    /**
+     * Converts Kubernetes CNP rules back to our NetworkRule format.
+     *
+     * @param kubernetesRules the Kubernetes rules
+     * @param ruleType the rule type
+     * @return list of converted network rules
+     */
+    @SuppressWarnings("unchecked")
+    private List<CiliumNetworkPolicyRequest.NetworkRule> convertKubernetesRulesToNetworkRules(
+            List<Map<String, Object>> kubernetesRules, CiliumNetworkPolicyRequest.RuleType ruleType) {
+        
+        List<CiliumNetworkPolicyRequest.NetworkRule> networkRules = new ArrayList<>();
+        
+        for (Map<String, Object> kubernetesRule : kubernetesRules) {
+            CiliumNetworkPolicyRequest.NetworkRule networkRule = new CiliumNetworkPolicyRequest.NetworkRule();
+            networkRule.setRuleType(ruleType);
+            
+            // Handle IP-based rules (fromCIDR/toCIDR)
+            List<String> cidrs = null;
+            if (ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW || ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_DENY) {
+                cidrs = (List<String>) kubernetesRule.get("fromCIDR");
+            } else {
+                cidrs = (List<String>) kubernetesRule.get("toCIDR");
+            }
+            
+            if (cidrs != null && !cidrs.isEmpty()) {
+                networkRule.setIpAddresses(cidrs);
+            }
+            
+            // Handle label-based rules (fromEndpoints/toEndpoints)
+            List<Map<String, Object>> endpoints = null;
+            if (ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW || ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_DENY) {
+                endpoints = (List<Map<String, Object>>) kubernetesRule.get("fromEndpoints");
+            } else {
+                endpoints = (List<Map<String, Object>>) kubernetesRule.get("toEndpoints");
+            }
+            
+            if (endpoints != null && !endpoints.isEmpty()) {
+                // Take the first endpoint selector (our API supports one set of labels per rule)
+                Map<String, Object> firstEndpoint = endpoints.get(0);
+                Map<String, Object> matchLabels = (Map<String, Object>) firstEndpoint.get("matchLabels");
+                
+                if (matchLabels != null) {
+                    Map<String, String> labels = new HashMap<>();
+                    matchLabels.forEach((key, value) -> {
+                        // Skip the automatic namespace constraint we added
+                        if (!NAMESPACE_LABEL_KEY.equals(key)) {
+                            labels.put(key, value.toString());
+                        }
+                    });
+                    
+                    if (!labels.isEmpty()) {
+                        if (ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW || ruleType == CiliumNetworkPolicyRequest.RuleType.INGRESS_DENY) {
+                            networkRule.setFromLabels(labels);
+                        } else {
+                            networkRule.setToLabels(labels);
+                        }
+                    }
+                }
+            }
+            
+            // Handle port rules
+            List<Map<String, Object>> toPorts = (List<Map<String, Object>>) kubernetesRule.get("toPorts");
+            if (toPorts != null && !toPorts.isEmpty()) {
+                Map<String, Object> toPortsEntry = toPorts.get(0);
+                List<Map<String, Object>> ports = (List<Map<String, Object>>) toPortsEntry.get("ports");
+                
+                if (ports != null && !ports.isEmpty()) {
+                    List<CiliumNetworkPolicyRequest.PortRule> portRules = new ArrayList<>();
+                    
+                    for (Map<String, Object> port : ports) {
+                        CiliumNetworkPolicyRequest.PortRule portRule = new CiliumNetworkPolicyRequest.PortRule();
+                        
+                        // Set protocol
+                        String protocol = (String) port.get("protocol");
+                        if (protocol != null) {
+                            portRule.setProtocol(CiliumNetworkPolicyRequest.Protocol.valueOf(protocol));
+                        }
+                        
+                        // Set port
+                        Object portObj = port.get("port");
+                        if (portObj != null) {
+                            portRule.setPort(Integer.valueOf(portObj.toString()));
+                        }
+                        
+                        // Set end port if present
+                        Object endPortObj = port.get("endPort");
+                        if (endPortObj != null) {
+                            portRule.setEndPort(Integer.valueOf(endPortObj.toString()));
+                        }
+                        
+                        portRules.add(portRule);
+                    }
+                    
+                    // Handle HTTP header matches
+                    Map<String, Object> rules = (Map<String, Object>) toPortsEntry.get("rules");
+                    if (rules != null) {
+                        List<Map<String, Object>> httpRules = (List<Map<String, Object>>) rules.get("http");
+                        if (httpRules != null && !httpRules.isEmpty() && !portRules.isEmpty()) {
+                            // Add header matches to the first port rule (our API structure)
+                            CiliumNetworkPolicyRequest.PortRule firstPortRule = portRules.get(0);
+                            List<CiliumNetworkPolicyRequest.HeaderMatch> headerMatches = new ArrayList<>();
+                            
+                            for (Map<String, Object> httpRule : httpRules) {
+                                List<Map<String, Object>> headerMatchesList = (List<Map<String, Object>>) httpRule.get("headerMatches");
+                                if (headerMatchesList != null) {
+                                    for (Map<String, Object> headerMatch : headerMatchesList) {
+                                        String name = (String) headerMatch.get("name");
+                                        String value = (String) headerMatch.get("value");
+                                        if (name != null && value != null) {
+                                            headerMatches.add(new CiliumNetworkPolicyRequest.HeaderMatch(name, value));
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (!headerMatches.isEmpty()) {
+                                firstPortRule.setHeaderMatches(headerMatches);
+                            }
+                        }
+                    }
+                    
+                    networkRule.setPorts(portRules);
+                }
+            }
+            
+            networkRules.add(networkRule);
+        }
+        
+        return networkRules;
+    }
 }

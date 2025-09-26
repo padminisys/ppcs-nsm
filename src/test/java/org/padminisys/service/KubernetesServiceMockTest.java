@@ -438,4 +438,364 @@ class KubernetesServiceMockTest {
         
         return request;
     }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_Success() {
+        LOG.info("TEST: Getting CiliumNetworkPolicy by name - Success scenario");
+        
+        // Given
+        String policyName = "gb7yp-md0dy8";
+        String namespace = "test-namespace";
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace(namespace, "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        Resource<GenericKubernetesResource> customResource = mock(Resource.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace(namespace)).thenReturn(customResourceOp);
+        when(customResourceOp.withName(policyName)).thenReturn(customResource);
+        
+        // Mock existing policy with proper structure
+        GenericKubernetesResource existingPolicy = createMockCiliumNetworkPolicyWithSpec(policyName, namespace);
+        when(customResource.get()).thenReturn(existingPolicy);
+
+        // When
+        CiliumNetworkPolicyRequest result = kubernetesService.getCiliumNetworkPolicyByName(policyName, namespace);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(namespace, result.getNamespace());
+        assertEquals("GB7YP", result.getLabels().get("serial"));
+        assertNotNull(result.getIngressRules());
+        assertEquals(1, result.getIngressRules().size());
+        
+        CiliumNetworkPolicyRequest.NetworkRule ingressRule = result.getIngressRules().get(0);
+        assertEquals(CiliumNetworkPolicyRequest.RuleType.INGRESS_ALLOW, ingressRule.getRuleType());
+        assertEquals("ingress", ingressRule.getFromLabels().get("padmini.systems/tenant-resource-type"));
+        
+        // Verify interactions
+        verify(namespaceResource).get();
+        verify(customResource).get();
+        LOG.info("✓ Successfully converted Kubernetes CNP back to request format");
+    }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_NotFound() {
+        // Given
+        String policyName = "non-existent";
+        String namespace = "test-namespace";
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace(namespace, "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        Resource<GenericKubernetesResource> customResource = mock(Resource.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace(namespace)).thenReturn(customResourceOp);
+        when(customResourceOp.withName(policyName)).thenReturn(customResource);
+        when(customResource.get()).thenReturn(null); // Policy doesn't exist
+
+        // When & Then
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            kubernetesService.getCiliumNetworkPolicyByName(policyName, namespace);
+        });
+
+        assertTrue(exception.getMessage().contains("not found"));
+        verify(namespaceResource).get();
+        verify(customResource).get();
+    }
+
+    @Test
+    void testGetCiliumNetworkPolicyByName_NamespaceNotFound() {
+        // Given
+        String policyName = "test-policy";
+        String namespace = "non-existent";
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(null); // Namespace doesn't exist
+
+        // When & Then
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            kubernetesService.getCiliumNetworkPolicyByName(policyName, namespace);
+        });
+
+        assertEquals("Namespace 'non-existent' does not exist", exception.getMessage());
+        verify(namespaceResource).get();
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByNamespace_Success() {
+        LOG.info("TEST: Getting all CiliumNetworkPolicies by namespace - Success scenario");
+        
+        // Given
+        String namespace = "test-namespace";
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace(namespace, "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        GenericKubernetesResourceList policyList = mock(GenericKubernetesResourceList.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace(namespace)).thenReturn(customResourceOp);
+        when(customResourceOp.list()).thenReturn(policyList);
+        
+        // Mock list of policies
+        List<GenericKubernetesResource> policies = List.of(
+                createMockCiliumNetworkPolicyWithSpec("policy1", namespace),
+                createMockCiliumNetworkPolicyWithSpec("policy2", namespace)
+        );
+        when(policyList.getItems()).thenReturn(policies);
+
+        // When
+        List<CiliumNetworkPolicyRequest> result = kubernetesService.getCiliumNetworkPoliciesByNamespace(namespace);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        
+        for (CiliumNetworkPolicyRequest policy : result) {
+            assertEquals(namespace, policy.getNamespace());
+            assertNotNull(policy.getLabels());
+            assertEquals("GB7YP", policy.getLabels().get("serial"));
+        }
+        
+        // Verify interactions
+        verify(namespaceResource).get();
+        verify(customResourceOp).list();
+        LOG.info("✓ Successfully retrieved and converted multiple policies");
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByNamespace_EmptyResult() {
+        // Given
+        String namespace = "empty-namespace";
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace(namespace, "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        GenericKubernetesResourceList policyList = mock(GenericKubernetesResourceList.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace(namespace)).thenReturn(customResourceOp);
+        when(customResourceOp.list()).thenReturn(policyList);
+        when(policyList.getItems()).thenReturn(List.of()); // Empty list
+
+        // When
+        List<CiliumNetworkPolicyRequest> result = kubernetesService.getCiliumNetworkPoliciesByNamespace(namespace);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(0, result.size());
+        
+        // Verify interactions
+        verify(namespaceResource).get();
+        verify(customResourceOp).list();
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_Success() {
+        LOG.info("TEST: Getting CiliumNetworkPolicies by endpoint selector - Success scenario");
+        
+        // Given
+        String namespace = "test-namespace";
+        Map<String, String> endpointLabels = Map.of("serial", "GB7YP");
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace(namespace, "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName(namespace)).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        GenericKubernetesResourceList policyList = mock(GenericKubernetesResourceList.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace(namespace)).thenReturn(customResourceOp);
+        when(customResourceOp.list()).thenReturn(policyList);
+        
+        // Mock list of policies - one matching, one not matching
+        List<GenericKubernetesResource> policies = List.of(
+                createMockCiliumNetworkPolicyWithSpec("matching-policy", namespace), // This matches serial=GB7YP
+                createMockCiliumNetworkPolicyWithDifferentSpec("non-matching-policy", namespace) // This has different serial
+        );
+        when(policyList.getItems()).thenReturn(policies);
+
+        // When
+        List<CiliumNetworkPolicyRequest> result = kubernetesService.getCiliumNetworkPoliciesByEndpointSelector(namespace, endpointLabels);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(1, result.size()); // Only one should match
+        
+        CiliumNetworkPolicyRequest matchingPolicy = result.get(0);
+        assertEquals(namespace, matchingPolicy.getNamespace());
+        assertEquals("GB7YP", matchingPolicy.getLabels().get("serial"));
+        
+        // Verify interactions
+        verify(namespaceResource).get();
+        verify(customResourceOp).list();
+        LOG.info("✓ Successfully filtered policies by endpoint selector");
+    }
+
+    @Test
+    void testGetCiliumNetworkPoliciesByEndpointSelector_AllNamespaces() {
+        // Given
+        Map<String, String> endpointLabels = Map.of("serial", "GB7YP");
+        
+        // Mock custom resource operations for all namespaces
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        GenericKubernetesResourceList policyList = mock(GenericKubernetesResourceList.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inAnyNamespace()).thenReturn(customResourceOp);
+        when(customResourceOp.list()).thenReturn(policyList);
+        
+        // Mock list of policies from different namespaces
+        List<GenericKubernetesResource> policies = List.of(
+                createMockCiliumNetworkPolicyWithSpec("policy1", "namespace1"),
+                createMockCiliumNetworkPolicyWithSpec("policy2", "namespace2")
+        );
+        when(policyList.getItems()).thenReturn(policies);
+
+        // When
+        List<CiliumNetworkPolicyRequest> result = kubernetesService.getCiliumNetworkPoliciesByEndpointSelector(null, endpointLabels);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        
+        // Verify interactions
+        verify(customResourceOp).inAnyNamespace();
+        verify(customResourceOp).list();
+        verify(kubernetesClient, never()).namespaces(); // Should not check namespace when searching all
+    }
+
+    // Helper method to create a mock CNP with proper spec structure
+    private GenericKubernetesResource createMockCiliumNetworkPolicyWithSpec(String name, String namespace) {
+        GenericKubernetesResource policy = createMockCiliumNetworkPolicy(name, namespace);
+        
+        // Create spec with endpointSelector and ingress rules
+        Map<String, Object> spec = new HashMap<>();
+        
+        // EndpointSelector
+        Map<String, Object> endpointSelector = new HashMap<>();
+        Map<String, Object> matchLabels = new HashMap<>();
+        matchLabels.put("serial", "GB7YP");
+        endpointSelector.put("matchLabels", matchLabels);
+        spec.put("endpointSelector", endpointSelector);
+        
+        // Ingress rules
+        List<Map<String, Object>> ingressRules = new ArrayList<>();
+        Map<String, Object> ingressRule = new HashMap<>();
+        
+        // fromEndpoints
+        List<Map<String, Object>> fromEndpoints = new ArrayList<>();
+        Map<String, Object> fromEndpoint = new HashMap<>();
+        Map<String, Object> fromMatchLabels = new HashMap<>();
+        fromMatchLabels.put("k8s:io.kubernetes.pod.namespace", namespace);
+        fromMatchLabels.put("padmini.systems/tenant-resource-type", "ingress");
+        fromEndpoint.put("matchLabels", fromMatchLabels);
+        fromEndpoints.add(fromEndpoint);
+        ingressRule.put("fromEndpoints", fromEndpoints);
+        
+        // toPorts
+        List<Map<String, Object>> toPorts = new ArrayList<>();
+        Map<String, Object> toPortsEntry = new HashMap<>();
+        
+        List<Map<String, Object>> ports = new ArrayList<>();
+        Map<String, Object> port = new HashMap<>();
+        port.put("port", "80");
+        port.put("protocol", "TCP");
+        ports.add(port);
+        toPortsEntry.put("ports", ports);
+        
+        // HTTP rules with header matches
+        Map<String, Object> rules = new HashMap<>();
+        List<Map<String, Object>> httpRules = new ArrayList<>();
+        Map<String, Object> httpRule = new HashMap<>();
+        List<Map<String, Object>> headerMatches = new ArrayList<>();
+        Map<String, Object> headerMatch = new HashMap<>();
+        headerMatch.put("name", "x-real-ip");
+        headerMatch.put("value", "45.248.67.9");
+        headerMatches.add(headerMatch);
+        httpRule.put("headerMatches", headerMatches);
+        httpRules.add(httpRule);
+        rules.put("http", httpRules);
+        toPortsEntry.put("rules", rules);
+        
+        toPorts.add(toPortsEntry);
+        ingressRule.put("toPorts", toPorts);
+        
+        ingressRules.add(ingressRule);
+        spec.put("ingress", ingressRules);
+        
+        policy.setAdditionalProperty("spec", spec);
+        return policy;
+    }
+
+    // Helper method to create a mock CNP with different spec (for filtering tests)
+    private GenericKubernetesResource createMockCiliumNetworkPolicyWithDifferentSpec(String name, String namespace) {
+        GenericKubernetesResource policy = createMockCiliumNetworkPolicy(name, namespace);
+        
+        // Create spec with different endpointSelector
+        Map<String, Object> spec = new HashMap<>();
+        
+        // EndpointSelector with different serial
+        Map<String, Object> endpointSelector = new HashMap<>();
+        Map<String, Object> matchLabels = new HashMap<>();
+        matchLabels.put("serial", "GB7YH"); // Different serial
+        endpointSelector.put("matchLabels", matchLabels);
+        spec.put("endpointSelector", endpointSelector);
+        
+        policy.setAdditionalProperty("spec", spec);
+        return policy;
+    }
 }
