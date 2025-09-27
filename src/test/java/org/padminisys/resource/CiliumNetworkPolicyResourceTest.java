@@ -660,6 +660,7 @@ class CiliumNetworkPolicyResourceTest {
                 .get("/api/v1/cilium-network-policies/gb7yp-md0dy8")
                 .then()
                 .statusCode(200)
+                .body("name", equalTo("gb7yp-md0dy8"))
                 .body("namespace", equalTo("test-namespace"))
                 .body("labels.serial", equalTo("GB7YP"))
                 .body("ingressRules", hasSize(1))
@@ -670,7 +671,14 @@ class CiliumNetworkPolicyResourceTest {
                 .body("ingressRules[0].ports[0].port", equalTo(80))
                 .body("ingressRules[0].ports[0].headerMatches", hasSize(1))
                 .body("ingressRules[0].ports[0].headerMatches[0].name", equalTo("x-real-ip"))
-                .body("ingressRules[0].ports[0].headerMatches[0].value", equalTo("45.248.67.9"));
+                .body("ingressRules[0].ports[0].headerMatches[0].value", equalTo("45.248.67.9"))
+                // Verify null values are not present
+                .body("ingressRules[0].ipAddresses", nullValue())
+                .body("ingressRules[0].toLabels", nullValue())
+                .body("ingressRules[0].ports[0].endPort", nullValue())
+                .body("ingressDenyRules", nullValue())
+                .body("egressRules", nullValue())
+                .body("egressDenyRules", nullValue());
     }
 
     @Test
@@ -716,8 +724,10 @@ class CiliumNetworkPolicyResourceTest {
                 .then()
                 .statusCode(200)
                 .body("", hasSize(2))
+                .body("[0].name", notNullValue())
                 .body("[0].namespace", equalTo("test-namespace"))
                 .body("[0].labels.serial", equalTo("GB7YP"))
+                .body("[1].name", notNullValue())
                 .body("[1].namespace", equalTo("test-namespace"))
                 .body("[1].labels.serial", equalTo("GB7YH"));
     }
@@ -768,6 +778,7 @@ class CiliumNetworkPolicyResourceTest {
                 .then()
                 .statusCode(200)
                 .body("", hasSize(1))
+                .body("[0].name", notNullValue())
                 .body("[0].namespace", equalTo("test-namespace"))
                 .body("[0].labels.serial", equalTo("GB7YP"));
     }
@@ -847,6 +858,7 @@ class CiliumNetworkPolicyResourceTest {
 
     private CiliumNetworkPolicyRequest createMockPolicyRequest() {
         CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
+        request.setName("gb7yp-md0dy8");
         request.setNamespace("test-namespace");
         request.setLabels(Map.of("serial", "GB7YP"));
         
@@ -871,6 +883,7 @@ class CiliumNetworkPolicyResourceTest {
 
     private CiliumNetworkPolicyRequest createMockPolicyRequest2() {
         CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
+        request.setName("gb7yh-abc123");
         request.setNamespace("test-namespace");
         request.setLabels(Map.of("serial", "GB7YH"));
         

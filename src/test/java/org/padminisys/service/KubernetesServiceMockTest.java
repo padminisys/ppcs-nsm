@@ -474,6 +474,7 @@ class KubernetesServiceMockTest {
 
         // Then
         assertNotNull(result);
+        assertEquals(policyName, result.getName());
         assertEquals(namespace, result.getNamespace());
         assertEquals("GB7YP", result.getLabels().get("serial"));
         assertNotNull(result.getIngressRules());
@@ -587,6 +588,7 @@ class KubernetesServiceMockTest {
         assertEquals(2, result.size());
         
         for (CiliumNetworkPolicyRequest policy : result) {
+            assertNotNull(policy.getName());
             assertEquals(namespace, policy.getNamespace());
             assertNotNull(policy.getLabels());
             assertEquals("GB7YP", policy.getLabels().get("serial"));
@@ -675,6 +677,7 @@ class KubernetesServiceMockTest {
         assertEquals(1, result.size()); // Only one should match
         
         CiliumNetworkPolicyRequest matchingPolicy = result.get(0);
+        assertNotNull(matchingPolicy.getName());
         assertEquals(namespace, matchingPolicy.getNamespace());
         assertEquals("GB7YP", matchingPolicy.getLabels().get("serial"));
         

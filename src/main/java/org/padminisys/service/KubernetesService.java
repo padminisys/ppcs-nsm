@@ -709,7 +709,8 @@ public class KubernetesService {
     private CiliumNetworkPolicyRequest convertKubernetesCNPToRequest(GenericKubernetesResource policy) {
         CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();
         
-        // Set namespace
+        // Set name and namespace
+        request.setName(policy.getMetadata().getName());
         request.setNamespace(policy.getMetadata().getNamespace());
         
         // Extract spec

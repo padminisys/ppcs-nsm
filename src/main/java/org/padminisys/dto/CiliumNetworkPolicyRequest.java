@@ -1,5 +1,6 @@
 package org.padminisys.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.validation.Valid;
@@ -25,10 +26,14 @@ import java.util.Map;
  * Request DTO for creating a CiliumNetworkPolicy.
  */
 @RegisterForReflection
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class CiliumNetworkPolicyRequest {
 
+    @JsonProperty("name")
+    private String name;
+
     @NotBlank(message = "Namespace cannot be blank")
-    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", 
+    @Pattern(regexp = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
              message = "Namespace must be a valid DNS-1123 label")
     @JsonProperty("namespace")
     private String namespace;
@@ -50,6 +55,14 @@ public class CiliumNetworkPolicyRequest {
     private List<@Valid NetworkRule> egressDenyRules;
 
     public CiliumNetworkPolicyRequest() {
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getNamespace() {
@@ -103,7 +116,8 @@ public class CiliumNetworkPolicyRequest {
     @Override
     public String toString() {
         return "CiliumNetworkPolicyRequest{" +
-                "namespace='" + namespace + '\'' +
+                "name='" + name + '\'' +
+                ", namespace='" + namespace + '\'' +
                 ", labels=" + labels +
                 ", ingressRules=" + ingressRules +
                 ", ingressDenyRules=" + ingressDenyRules +
@@ -165,6 +179,7 @@ public class CiliumNetworkPolicyRequest {
      * Supports both IP-based (CIDR) and label-based (fromEndpoints/toEndpoints) matching.
      */
     @RegisterForReflection
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @ValidNetworkRule
     public static class NetworkRule {
 
@@ -245,6 +260,7 @@ public class CiliumNetworkPolicyRequest {
      * Represents a port rule with protocol, port range, and optional HTTP header matching.
      */
     @RegisterForReflection
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class PortRule {
 
         @NotNull(message = "Protocol cannot be null")
@@ -311,6 +327,7 @@ public class CiliumNetworkPolicyRequest {
      * Represents an HTTP header match for network policies.
      */
     @RegisterForReflection
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class HeaderMatch {
 
         @NotBlank(message = "Header name cannot be blank")
