@@ -355,6 +355,240 @@ class KubernetesServiceMockTest {
     }
 
     @Test
+    void testCreateCiliumNetworkPolicy_WithUserProvidedName_Success() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with user-provided name - Success scenario");
+        LOG.info("Scenario: User provides name, should use exact name without generation");
+        
+        // Given
+        CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
+        request.setName("user-provided-policy"); // User provides specific name
+        LOG.info("Input: CiliumNetworkPolicyRequest with user-provided name='user-provided-policy'");
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace("test-namespace", "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName("test-namespace")).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        LOG.info("Mock Setup: Namespace 'test-namespace' exists");
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        Resource<GenericKubernetesResource> customResource = mock(Resource.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace("test-namespace")).thenReturn(customResourceOp);
+        when(customResourceOp.withName("user-provided-policy")).thenReturn(customResource);
+        when(customResource.get()).thenReturn(null); // Policy doesn't exist
+        LOG.info("Mock Setup: CiliumNetworkPolicy with user-provided name doesn't exist, will be created");
+        
+        // Mock successful creation
+        GenericKubernetesResource createdPolicy = createMockCiliumNetworkPolicy("user-provided-policy", "test-namespace");
+        when(customResourceOp.create(any(GenericKubernetesResource.class))).thenReturn(createdPolicy);
+
+        // When
+        LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() with user-provided name");
+        CiliumNetworkPolicyResponse response = kubernetesService.createCiliumNetworkPolicy(request);
+
+        // Then
+        assertNotNull(response);
+        assertEquals("user-provided-policy", response.getName());
+        assertEquals("test-namespace", response.getNamespace());
+        assertEquals("CREATED", response.getStatus());
+        assertEquals("CiliumNetworkPolicy created successfully", response.getMessage());
+        assertNotNull(response.getCreatedAt());
+        assertEquals("user-provided-policy", response.getGeneratedName()); // Should be same as provided name
+        LOG.info("✓ Response validation PASSED: Status=CREATED, Name=user-provided-policy (exact match)");
+
+        // Verify interactions - should use exact name provided by user
+        verify(namespaceResource).get();
+        verify(customResource).get();
+        verify(customResourceOp).create(any(GenericKubernetesResource.class));
+        
+        // Verify that the exact user-provided name was used (not generated)
+        verify(customResourceOp).withName("user-provided-policy");
+        LOG.info("✓ Mock interactions verified: Used exact user-provided name without generation");
+        
+        // Verify the created policy resource has the correct name
+        ArgumentCaptor<GenericKubernetesResource> policyCaptor = ArgumentCaptor.forClass(GenericKubernetesResource.class);
+        verify(customResourceOp).create(policyCaptor.capture());
+        GenericKubernetesResource capturedPolicy = policyCaptor.getValue();
+        assertEquals("user-provided-policy", capturedPolicy.getMetadata().getName());
+        LOG.info("✓ Policy resource verified: Correct user-provided name applied");
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_WithUserProvidedName_AlreadyExists() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with user-provided name - Already exists (patching scenario)");
+        LOG.info("Scenario: User provides name of existing policy, should return EXISTS for patching/updating");
+        
+        // Given
+        CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
+        request.setName("existing-user-policy"); // User provides name of existing policy
+        LOG.info("Input: CiliumNetworkPolicyRequest with existing user-provided name='existing-user-policy'");
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace("test-namespace", "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName("test-namespace")).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        LOG.info("Mock Setup: Namespace 'test-namespace' exists");
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        Resource<GenericKubernetesResource> customResource = mock(Resource.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace("test-namespace")).thenReturn(customResourceOp);
+        when(customResourceOp.withName("existing-user-policy")).thenReturn(customResource);
+        
+        // Mock existing policy
+        GenericKubernetesResource existingPolicy = createMockCiliumNetworkPolicy("existing-user-policy", "test-namespace");
+        when(customResource.get()).thenReturn(existingPolicy);
+        LOG.info("Mock Setup: CiliumNetworkPolicy with user-provided name already exists");
+
+        // When
+        LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() for existing user-provided name");
+        CiliumNetworkPolicyResponse response = kubernetesService.createCiliumNetworkPolicy(request);
+
+        // Then
+        assertNotNull(response);
+        assertEquals("existing-user-policy", response.getName());
+        assertEquals("test-namespace", response.getNamespace());
+        assertEquals("EXISTS", response.getStatus());
+        assertEquals("CiliumNetworkPolicy exists - ready for update/patch", response.getMessage());
+        assertNotNull(response.getCreatedAt());
+        assertEquals("existing-user-policy", response.getGeneratedName());
+        LOG.info("✓ Response validation PASSED: Status=EXISTS, ready for patching/updating");
+
+        // Verify interactions - should check existence but not create
+        verify(namespaceResource).get();
+        verify(customResource).get();
+        verify(customResourceOp, never()).create(any(GenericKubernetesResource.class));
+        LOG.info("✓ Mock interactions verified: Checked existence but did NOT attempt creation (ready for patch)");
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_WithInvalidUserProvidedName() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with invalid user-provided name - Validation failure");
+        LOG.info("Scenario: User provides invalid DNS-1123 name, should fail validation");
+        
+        // Given
+        CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
+        request.setName("Invalid_Name_With_Underscores"); // Invalid DNS-1123 name
+        LOG.info("Input: CiliumNetworkPolicyRequest with invalid name='Invalid_Name_With_Underscores'");
+
+        // When & Then
+        LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() with invalid name");
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            kubernetesService.createCiliumNetworkPolicy(request);
+        });
+
+        assertTrue(exception.getMessage().contains("Policy name must be a valid DNS-1123 label"));
+        LOG.info("✓ Validation PASSED: Correctly rejected invalid DNS-1123 name");
+        LOG.info("  - Error message: " + exception.getMessage());
+        
+        // Verify no Kubernetes API calls were made due to early validation failure
+        verify(kubernetesClient, never()).namespaces();
+        LOG.info("✓ Early validation confirmed: No Kubernetes API calls made for invalid name");
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_WithTooLongUserProvidedName() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with too long user-provided name - Length validation");
+        LOG.info("Scenario: User provides name exceeding 63 characters, should fail validation");
+        
+        // Given
+        CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
+        String tooLongName = "a".repeat(64); // 64 characters, exceeds DNS-1123 limit of 63
+        request.setName(tooLongName);
+        LOG.info("Input: CiliumNetworkPolicyRequest with too long name (64 chars): '" + tooLongName + "'");
+
+        // When & Then
+        LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() with too long name");
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            kubernetesService.createCiliumNetworkPolicy(request);
+        });
+
+        assertTrue(exception.getMessage().contains("Policy name must not exceed 63 characters"));
+        LOG.info("✓ Length validation PASSED: Correctly rejected name exceeding 63 characters");
+        LOG.info("  - Error message: " + exception.getMessage());
+        
+        // Verify no Kubernetes API calls were made due to early validation failure
+        verify(kubernetesClient, never()).namespaces();
+        LOG.info("✓ Early validation confirmed: No Kubernetes API calls made for too long name");
+    }
+
+    @Test
+    void testCreateCiliumNetworkPolicy_WithBlankUserProvidedName_FallsBackToGeneration() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with blank user-provided name - Falls back to generation");
+        LOG.info("Scenario: User provides blank/empty name, should fall back to auto-generation");
+        
+        // Given
+        CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
+        request.setName("   "); // Blank name (whitespace only)
+        LOG.info("Input: CiliumNetworkPolicyRequest with blank name (should fall back to generation)");
+        
+        // Mock namespace check
+        NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);
+        Resource<Namespace> namespaceResource = mock(Resource.class);
+        Namespace existingNamespace = createMockNamespace("test-namespace", "2023-01-01T09:00:00Z");
+        
+        when(kubernetesClient.namespaces()).thenReturn(namespacesOp);
+        when(namespacesOp.withName("test-namespace")).thenReturn(namespaceResource);
+        when(namespaceResource.get()).thenReturn(existingNamespace);
+        LOG.info("Mock Setup: Namespace 'test-namespace' exists");
+        
+        // Mock custom resource operations
+        MixedOperation<GenericKubernetesResource, GenericKubernetesResourceList, Resource<GenericKubernetesResource>> customResourceOp = mock(MixedOperation.class);
+        Resource<GenericKubernetesResource> customResource = mock(Resource.class);
+        
+        when(kubernetesClient.genericKubernetesResources(any(CustomResourceDefinitionContext.class)))
+                .thenReturn(customResourceOp);
+        when(customResourceOp.inNamespace("test-namespace")).thenReturn(customResourceOp);
+        when(customResourceOp.withName(anyString())).thenReturn(customResource);
+        when(customResource.get()).thenReturn(null); // Policy doesn't exist
+        LOG.info("Mock Setup: CiliumNetworkPolicy doesn't exist, will be created with generated name");
+        
+        // Mock successful creation
+        GenericKubernetesResource createdPolicy = createMockCiliumNetworkPolicy("test-tenant-tes-abc123", "test-namespace");
+        when(customResourceOp.create(any(GenericKubernetesResource.class))).thenReturn(createdPolicy);
+
+        // When
+        LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() with blank name");
+        CiliumNetworkPolicyResponse response = kubernetesService.createCiliumNetworkPolicy(request);
+
+        // Then
+        assertNotNull(response);
+        assertEquals("test-tenant-tes-abc123", response.getName());
+        assertEquals("test-namespace", response.getNamespace());
+        assertEquals("CREATED", response.getStatus());
+        assertEquals("CiliumNetworkPolicy created successfully", response.getMessage());
+        assertNotNull(response.getCreatedAt());
+        LOG.info("✓ Response validation PASSED: Status=CREATED with auto-generated name");
+        
+        // Verify the generated name follows the expected pattern
+        String generatedName = response.getGeneratedName();
+        LOG.info("Testing generated name pattern: '" + generatedName + "'");
+        assertTrue(generatedName.matches("^[a-z0-9-]+-[a-z0-9]{6}$"),
+                   "Generated name should match pattern: alphanumeric-with-dashes-6randomchars, but was: " + generatedName);
+        LOG.info("✓ Generated name validation PASSED: Fell back to auto-generation for blank user input");
+
+        // Verify interactions
+        verify(namespaceResource).get();
+        verify(customResource).get();
+        verify(customResourceOp).create(any(GenericKubernetesResource.class));
+        LOG.info("✓ Mock interactions verified: Used auto-generation fallback for blank name");
+    }
+
+    @Test
     void testIsKubernetesAvailable_Success() {
         // Given
         NonNamespaceOperation<Namespace, NamespaceList, Resource<Namespace>> namespacesOp = mock(NonNamespaceOperation.class);

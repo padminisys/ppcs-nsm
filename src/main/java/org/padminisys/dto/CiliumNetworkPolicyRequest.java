@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.Constraint;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
@@ -29,6 +30,9 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CiliumNetworkPolicyRequest {
 
+    @Pattern(regexp = "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+             message = "Policy name must be a valid DNS-1123 label")
+    @Size(max = 63, message = "Policy name must not exceed 63 characters")
     @JsonProperty("name")
     private String name;
 

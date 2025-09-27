@@ -269,6 +269,171 @@ class CiliumNetworkPolicyRequestValidationTest {
         assertTrue(violations.isEmpty(), "Valid request with mixed rule types should have no violations");
     }
 
+    @Test
+    void testValidRequest_WithValidUserProvidedName() {
+        // Given
+        CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+        request.setName("valid-policy-name");
+
+        // When
+        Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+        // Then
+        assertTrue(violations.isEmpty(), "Valid request with valid user-provided name should have no violations");
+    }
+
+    @Test
+    void testValidRequest_WithoutName() {
+        // Given
+        CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+        request.setName(null); // No name provided, should use auto-generation
+
+        // When
+        Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+        // Then
+        assertTrue(violations.isEmpty(), "Valid request without name should have no violations (auto-generation)");
+    }
+
+    @Test
+    void testValidRequest_WithBlankName() {
+        // Given
+        CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+        request.setName(""); // Blank name, should fall back to auto-generation
+
+        // When
+        Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+        // Then
+        assertTrue(violations.isEmpty(), "Valid request with blank name should have no violations (auto-generation fallback)");
+    }
+
+    @Test
+    void testValidRequest_WithValidDNS1123Names() {
+        // Test various valid DNS-1123 names
+        String[] validNames = {
+            "a",                    // Single character
+            "test",                 // Simple name
+            "test-policy",          // With dash
+            "policy123",            // With numbers
+            "123policy",            // Starting with number
+            "a-b-c-d-e-f-g-h-i-j-k-l-m-n-o-p-q-r-s-t-u-v-w-x-y-z-1-2-3-4-5", // Long but valid (exactly 63 chars)
+            "my-app-v2"             // Common pattern
+        };
+
+        for (String validName : validNames) {
+            // Given
+            CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+            request.setName(validName);
+
+            // When
+            Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+            // Then
+            assertTrue(violations.isEmpty(),
+                "Valid DNS-1123 name '" + validName + "' (length: " + validName.length() + ") should have no violations");
+        }
+    }
+
+    @Test
+    void testInvalidRequest_WithInvalidDNS1123Names() {
+        // Test various invalid DNS-1123 names
+        String[] invalidNames = {
+            "UPPERCASE",            // Uppercase not allowed
+            "test_underscore",      // Underscore not allowed
+            "test.dot",             // Dot not allowed
+            "-start-dash",          // Cannot start with dash
+            "end-dash-",            // Cannot end with dash
+            "test space",           // Space not allowed
+            "test@symbol",          // Special characters not allowed
+            "test/slash",           // Slash not allowed
+            "test\\backslash",      // Backslash not allowed
+            "test:colon",           // Colon not allowed
+            "a".repeat(64)          // Too long (64 characters, limit is 63)
+        };
+
+        for (String invalidName : invalidNames) {
+            // Given
+            CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+            request.setName(invalidName);
+
+            // When
+            Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+            // Then
+            assertFalse(violations.isEmpty(),
+                "Invalid DNS-1123 name '" + invalidName + "' should have violations");
+            assertTrue(violations.stream().anyMatch(v ->
+                v.getMessage().contains("Policy name must be a valid DNS-1123 label") ||
+                v.getMessage().contains("Policy name must not exceed 63 characters")),
+                "Should have validation error for name: " + invalidName + " - violations: " +
+                violations.stream().map(ConstraintViolation::getMessage).toList());
+        }
+    }
+
+    @Test
+    void testInvalidRequest_WithMaxLengthExceeded() {
+        // Given
+        CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+        String tooLongName = "a".repeat(64); // 64 characters, exceeds limit of 63
+        request.setName(tooLongName);
+
+        // When
+        Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+        // Then
+        assertFalse(violations.isEmpty());
+        assertTrue(violations.stream().anyMatch(v ->
+            v.getMessage().contains("Policy name must not exceed 63 characters")),
+            "Should have size validation error for too long name - violations: " +
+            violations.stream().map(ConstraintViolation::getMessage).toList());
+    }
+
+    @Test
+    void testValidRequest_WithMaxLengthName() {
+        // Given
+        CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+        String maxLengthName = "a".repeat(63); // Exactly 63 characters, should be valid
+        request.setName(maxLengthName);
+
+        // When
+        Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+        // Then
+        assertTrue(violations.isEmpty(),
+            "Valid DNS-1123 name with max length (63 chars) should have no violations");
+    }
+
+    @Test
+    void testValidRequest_WithCommonPolicyNamePatterns() {
+        // Test common real-world policy name patterns
+        String[] commonPatterns = {
+            "allow-ingress",
+            "deny-egress",
+            "web-to-db",
+            "frontend-policy",
+            "backend-access",
+            "api-gateway-rules",
+            "microservice-mesh",
+            "tenant-isolation",
+            "network-segmentation",
+            "security-policy-v1"
+        };
+
+        for (String pattern : commonPatterns) {
+            // Given
+            CiliumNetworkPolicyRequest request = createValidIPBasedRequest();
+            request.setName(pattern);
+
+            // When
+            Set<ConstraintViolation<CiliumNetworkPolicyRequest>> violations = validator.validate(request);
+
+            // Then
+            assertTrue(violations.isEmpty(),
+                "Common policy name pattern '" + pattern + "' should be valid");
+        }
+    }
+
     // Helper methods
     private CiliumNetworkPolicyRequest createValidIPBasedRequest() {
         CiliumNetworkPolicyRequest request = new CiliumNetworkPolicyRequest();

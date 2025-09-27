@@ -174,8 +174,12 @@ public class KubernetesService {
      * @throws KubernetesClientException if policy creation fails
      */
     public CiliumNetworkPolicyResponse createCiliumNetworkPolicy(CiliumNetworkPolicyRequest request) {
-        String generatedName = generatePolicyName(request.getLabels());
-        LOG.infof("Creating CiliumNetworkPolicy: %s in namespace: %s", generatedName, request.getNamespace());
+        // Determine the policy name: use provided name or generate one
+        String policyName = determinePolicyName(request);
+        boolean isUserProvidedName = request.getName() != null && !request.getName().trim().isEmpty();
+        
+        LOG.infof("Creating CiliumNetworkPolicy: %s in namespace: %s (name source: %s)",
+                 policyName, request.getNamespace(), isUserProvidedName ? "user-provided" : "auto-generated");
 
         try {
             // Check if namespace exists
@@ -191,30 +195,36 @@ public class KubernetesService {
             GenericKubernetesResource existingPolicy = kubernetesClient
                     .genericKubernetesResources(ciliumNetworkPolicyContext)
                     .inNamespace(request.getNamespace())
-                    .withName(generatedName)
+                    .withName(policyName)
                     .get();
 
             if (existingPolicy != null) {
-                LOG.warnf("CiliumNetworkPolicy %s already exists in namespace %s", generatedName, request.getNamespace());
+                if (isUserProvidedName) {
+                    // For user-provided names, this enables patching/updating existing policies
+                    LOG.infof("CiliumNetworkPolicy %s already exists in namespace %s - will update/patch", policyName, request.getNamespace());
+                } else {
+                    // For auto-generated names, this should be rare but we handle it
+                    LOG.warnf("CiliumNetworkPolicy %s already exists in namespace %s", policyName, request.getNamespace());
+                }
                 return new CiliumNetworkPolicyResponse(
-                        generatedName,
+                        policyName,
                         request.getNamespace(),
                         "EXISTS",
                         Instant.parse(existingPolicy.getMetadata().getCreationTimestamp()),
-                        "CiliumNetworkPolicy already exists",
-                        generatedName
+                        isUserProvidedName ? "CiliumNetworkPolicy exists - ready for update/patch" : "CiliumNetworkPolicy already exists",
+                        policyName
                 );
             }
 
             // Create the CiliumNetworkPolicy resource
-            GenericKubernetesResource ciliumPolicy = createCiliumPolicyResource(request, generatedName);
+            GenericKubernetesResource ciliumPolicy = createCiliumPolicyResource(request, policyName);
 
             GenericKubernetesResource createdPolicy = kubernetesClient
                     .genericKubernetesResources(ciliumNetworkPolicyContext)
                     .inNamespace(request.getNamespace())
                     .create(ciliumPolicy);
 
-            LOG.infof("Successfully created CiliumNetworkPolicy: %s in namespace: %s", generatedName, request.getNamespace());
+            LOG.infof("Successfully created CiliumNetworkPolicy: %s in namespace: %s", policyName, request.getNamespace());
 
             return new CiliumNetworkPolicyResponse(
                     createdPolicy.getMetadata().getName(),
@@ -222,12 +232,48 @@ public class KubernetesService {
                     "CREATED",
                     Instant.parse(createdPolicy.getMetadata().getCreationTimestamp()),
                     "CiliumNetworkPolicy created successfully",
-                    generatedName
+                    policyName
             );
 
         } catch (KubernetesClientException e) {
-            LOG.errorf(e, "Failed to create CiliumNetworkPolicy: %s in namespace: %s", generatedName, request.getNamespace());
+            LOG.errorf(e, "Failed to create CiliumNetworkPolicy: %s in namespace: %s", policyName, request.getNamespace());
             throw new RuntimeException("Failed to create CiliumNetworkPolicy: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Determines the policy name to use: either user-provided or auto-generated.
+     *
+     * @param request the CiliumNetworkPolicy request
+     * @return the policy name to use
+     */
+    private String determinePolicyName(CiliumNetworkPolicyRequest request) {
+        // If user provided a name, use it (after validation)
+        if (request.getName() != null && !request.getName().trim().isEmpty()) {
+            String userProvidedName = request.getName().trim();
+            validateUserProvidedPolicyName(userProvidedName);
+            return userProvidedName;
+        }
+        
+        // Otherwise, generate a name based on labels
+        return generatePolicyName(request.getLabels());
+    }
+
+    /**
+     * Validates a user-provided policy name for DNS-1123 compliance.
+     *
+     * @param name the name to validate
+     * @throws RuntimeException if the name is invalid
+     */
+    private void validateUserProvidedPolicyName(String name) {
+        // DNS-1123 label validation: lowercase alphanumeric characters or '-',
+        // must start and end with alphanumeric character, max 63 characters
+        if (name.length() > 63) {
+            throw new RuntimeException("Policy name must not exceed 63 characters (DNS-1123 compliance)");
+        }
+        
+        if (!name.matches("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")) {
+            throw new RuntimeException("Policy name must be a valid DNS-1123 label: lowercase alphanumeric characters or '-', must start and end with alphanumeric character");
         }
     }
 
