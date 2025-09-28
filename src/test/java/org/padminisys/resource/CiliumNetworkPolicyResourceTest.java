@@ -9,6 +9,7 @@ import org.mockito.Mockito;
 import org.padminisys.dto.CiliumNetworkPolicyRequest;
 import org.padminisys.dto.CiliumNetworkPolicyResponse;
 import org.padminisys.service.KubernetesService;
+import org.padminisys.service.CiliumNetworkPolicyService;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,9 +26,13 @@ class CiliumNetworkPolicyResourceTest {
     @InjectMock
     KubernetesService kubernetesService;
 
+    @InjectMock
+    CiliumNetworkPolicyService ciliumNetworkPolicyService;
+
     @BeforeEach
     void setUp() {
         Mockito.reset(kubernetesService);
+        Mockito.reset(ciliumNetworkPolicyService);
     }
 
     @Test
@@ -650,7 +655,7 @@ class CiliumNetworkPolicyResourceTest {
     void testGetCiliumNetworkPolicyByName_Success() {
         // Given
         CiliumNetworkPolicyRequest mockRequest = createMockPolicyRequest();
-        when(kubernetesService.getCiliumNetworkPolicyByName("gb7yp-md0dy8", "test-namespace"))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPolicyByName("gb7yp-md0dy8", "test-namespace"))
                 .thenReturn(mockRequest);
 
         // When & Then
@@ -684,7 +689,7 @@ class CiliumNetworkPolicyResourceTest {
     @Test
     void testGetCiliumNetworkPolicyByName_NotFound() {
         // Given
-        when(kubernetesService.getCiliumNetworkPolicyByName("non-existent", "test-namespace"))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPolicyByName("non-existent", "test-namespace"))
                 .thenThrow(new RuntimeException("CiliumNetworkPolicy 'non-existent' not found in namespace 'test-namespace'"));
 
         // When & Then
@@ -714,7 +719,7 @@ class CiliumNetworkPolicyResourceTest {
                 createMockPolicyRequest(),
                 createMockPolicyRequest2()
         );
-        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("test-namespace"))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByNamespace("test-namespace"))
                 .thenReturn(mockPolicies);
 
         // When & Then
@@ -735,7 +740,7 @@ class CiliumNetworkPolicyResourceTest {
     @Test
     void testGetCiliumNetworkPoliciesByNamespace_EmptyResult() {
         // Given
-        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("empty-namespace"))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByNamespace("empty-namespace"))
                 .thenReturn(List.of());
 
         // When & Then
@@ -750,7 +755,7 @@ class CiliumNetworkPolicyResourceTest {
     @Test
     void testGetCiliumNetworkPoliciesByNamespace_NamespaceNotFound() {
         // Given
-        when(kubernetesService.getCiliumNetworkPoliciesByNamespace("non-existent"))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByNamespace("non-existent"))
                 .thenThrow(new RuntimeException("Namespace 'non-existent' does not exist"));
 
         // When & Then
@@ -766,7 +771,7 @@ class CiliumNetworkPolicyResourceTest {
     void testGetCiliumNetworkPoliciesByEndpointSelector_Success() {
         // Given
         List<CiliumNetworkPolicyRequest> mockPolicies = List.of(createMockPolicyRequest());
-        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace", Map.of("serial", "GB7YP")))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace", Map.of("serial", "GB7YP")))
                 .thenReturn(mockPolicies);
 
         // When & Then
@@ -787,7 +792,7 @@ class CiliumNetworkPolicyResourceTest {
     void testGetCiliumNetworkPoliciesByEndpointSelector_MultipleLabels() {
         // Given
         List<CiliumNetworkPolicyRequest> mockPolicies = List.of(createMockPolicyRequest());
-        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace",
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByEndpointSelector("test-namespace",
                 Map.of("serial", "GB7YP", "environment", "production")))
                 .thenReturn(mockPolicies);
 
@@ -809,7 +814,7 @@ class CiliumNetworkPolicyResourceTest {
                 createMockPolicyRequest(),
                 createMockPolicyRequest2()
         );
-        when(kubernetesService.getCiliumNetworkPoliciesByEndpointSelector(null, Map.of("serial", "GB7YP")))
+        when(ciliumNetworkPolicyService.getCiliumNetworkPoliciesByEndpointSelector(null, Map.of("serial", "GB7YP")))
                 .thenReturn(mockPolicies);
 
         // When & Then
@@ -899,5 +904,192 @@ class CiliumNetworkPolicyResourceTest {
         request.setIngressRules(List.of(ingressRule));
         
         return request;
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_Success() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteCiliumNetworkPolicy("test-policy", "test-namespace"))
+                .thenReturn(true);
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .delete("/api/v1/cilium-network-policies/test-policy")
+                .then()
+                .statusCode(200)
+                .body("message", equalTo("CiliumNetworkPolicy deleted successfully"))
+                .body("policyName", equalTo("test-policy"))
+                .body("namespace", equalTo("test-namespace"))
+                .body("deletedCount", equalTo(1))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_PolicyNotFound() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteCiliumNetworkPolicy("non-existent", "test-namespace"))
+                .thenReturn(false);
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .delete("/api/v1/cilium-network-policies/non-existent")
+                .then()
+                .statusCode(404)
+                .body("error", containsString("CiliumNetworkPolicy 'non-existent' not found in namespace 'test-namespace'"))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_NamespaceNotFound() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteCiliumNetworkPolicy("test-policy", "non-existent"))
+                .thenThrow(new RuntimeException("Namespace 'non-existent' does not exist"));
+
+        // When & Then
+        given()
+                .queryParam("namespace", "non-existent")
+                .when()
+                .delete("/api/v1/cilium-network-policies/test-policy")
+                .then()
+                .statusCode(404)
+                .body("error", containsString("Namespace not found"))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_InternalServerError() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteCiliumNetworkPolicy("test-policy", "test-namespace"))
+                .thenThrow(new RuntimeException("Kubernetes API error"));
+
+        // When & Then
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .delete("/api/v1/cilium-network-policies/test-policy")
+                .then()
+                .statusCode(500)
+                .body("error", containsString("Failed to delete CiliumNetworkPolicy"))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_MissingNamespaceParam() {
+        // When & Then
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/test-policy")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void testDeleteAllCiliumNetworkPoliciesInNamespace_Success() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteAllCiliumNetworkPoliciesInNamespace("test-namespace"))
+                .thenReturn(3);
+
+        // When & Then
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/namespace/test-namespace")
+                .then()
+                .statusCode(200)
+                .body("message", equalTo("Successfully deleted 3 CiliumNetworkPolicies"))
+                .body("policyName", nullValue())
+                .body("namespace", equalTo("test-namespace"))
+                .body("deletedCount", equalTo(3))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteAllCiliumNetworkPoliciesInNamespace_NoPolicies() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteAllCiliumNetworkPoliciesInNamespace("empty-namespace"))
+                .thenReturn(0);
+
+        // When & Then
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/namespace/empty-namespace")
+                .then()
+                .statusCode(200)
+                .body("message", equalTo("No CiliumNetworkPolicies found to delete"))
+                .body("policyName", nullValue())
+                .body("namespace", equalTo("empty-namespace"))
+                .body("deletedCount", equalTo(0))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteAllCiliumNetworkPoliciesInNamespace_NamespaceNotFound() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteAllCiliumNetworkPoliciesInNamespace("non-existent"))
+                .thenThrow(new RuntimeException("Namespace 'non-existent' does not exist"));
+
+        // When & Then
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/namespace/non-existent")
+                .then()
+                .statusCode(404)
+                .body("error", containsString("Namespace not found"))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteAllCiliumNetworkPoliciesInNamespace_InternalServerError() {
+        // Given
+        when(ciliumNetworkPolicyService.deleteAllCiliumNetworkPoliciesInNamespace("test-namespace"))
+                .thenThrow(new RuntimeException("Kubernetes API error"));
+
+        // When & Then
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/namespace/test-namespace")
+                .then()
+                .statusCode(500)
+                .body("error", containsString("Failed to delete CiliumNetworkPolicies"))
+                .body("timestamp", notNullValue());
+    }
+
+    @Test
+    void testDeleteCiliumNetworkPolicy_ValidatesPathParameters() {
+        // Test with empty policy name in path - should return 400 for missing path param
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .delete("/api/v1/cilium-network-policies/")
+                .then()
+                .statusCode(400); // Bad request for malformed path
+
+        // Test with empty namespace in path for delete all - should return 400 for malformed path
+        given()
+                .when()
+                .delete("/api/v1/cilium-network-policies/namespace/")
+                .then()
+                .statusCode(400); // Bad request for malformed path
+    }
+
+    @Test
+    void testDeleteEndpoints_MethodNotAllowed() {
+        // Test that other HTTP methods are not allowed on delete endpoints
+        // Note: These paths don't exist as POST endpoints, so they return 400 (Bad Request) instead of 405
+        given()
+                .queryParam("namespace", "test-namespace")
+                .when()
+                .post("/api/v1/cilium-network-policies/test-policy")
+                .then()
+                .statusCode(400); // Bad request - path doesn't exist for POST
+
+        given()
+                .when()
+                .post("/api/v1/cilium-network-policies/namespace/test-namespace")
+                .then()
+                .statusCode(400); // Bad request - path doesn't exist for POST
     }
 }

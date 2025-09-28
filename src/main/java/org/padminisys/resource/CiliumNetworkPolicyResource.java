@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import org.padminisys.dto.CiliumNetworkPolicyRequest;
 import org.padminisys.dto.CiliumNetworkPolicyResponse;
 import org.padminisys.service.KubernetesService;
+import org.padminisys.service.CiliumNetworkPolicyService;
 
 import java.util.HashMap;
 import java.util.List;
@@ -34,6 +35,9 @@ public class CiliumNetworkPolicyResource {
 
     @Inject
     KubernetesService kubernetesService;
+
+    @Inject
+    CiliumNetworkPolicyService ciliumNetworkPolicyService;
 
     @POST
     @Operation(
@@ -132,7 +136,7 @@ public class CiliumNetworkPolicyResource {
         LOG.infof("Received request to get CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
 
         try {
-            CiliumNetworkPolicyRequest policy = kubernetesService.getCiliumNetworkPolicyByName(name, namespace);
+            CiliumNetworkPolicyRequest policy = ciliumNetworkPolicyService.getCiliumNetworkPolicyByName(name, namespace);
             return Response.ok(policy).build();
         } catch (RuntimeException e) {
             LOG.errorf(e, "Error getting CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
@@ -179,7 +183,7 @@ public class CiliumNetworkPolicyResource {
         LOG.infof("Received request to get all CiliumNetworkPolicies in namespace: %s", namespace);
 
         try {
-            List<CiliumNetworkPolicyRequest> policies = kubernetesService.getCiliumNetworkPoliciesByNamespace(namespace);
+            List<CiliumNetworkPolicyRequest> policies = ciliumNetworkPolicyService.getCiliumNetworkPoliciesByNamespace(namespace);
             return Response.ok(policies).build();
         } catch (RuntimeException e) {
             LOG.errorf(e, "Error getting CiliumNetworkPolicies in namespace: %s", namespace);
@@ -231,7 +235,7 @@ public class CiliumNetworkPolicyResource {
             // Parse labels from query parameter (format: key1=value1,key2=value2)
             Map<String, String> labels = parseLabelsFromQueryParam(labelsParam);
             
-            List<CiliumNetworkPolicyRequest> policies = kubernetesService.getCiliumNetworkPoliciesByEndpointSelector(namespace, labels);
+            List<CiliumNetworkPolicyRequest> policies = ciliumNetworkPolicyService.getCiliumNetworkPoliciesByEndpointSelector(namespace, labels);
             return Response.ok(policies).build();
         } catch (IllegalArgumentException e) {
             LOG.errorf(e, "Invalid labels parameter: %s", labelsParam);
@@ -246,6 +250,112 @@ public class CiliumNetworkPolicyResource {
                     .build();
         } catch (Exception e) {
             LOG.errorf(e, "Unexpected error getting CiliumNetworkPolicies by endpoint selector: %s", labelsParam);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse("Unexpected error: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    @DELETE
+    @Path("/{name}")
+    @Operation(
+            summary = "Delete a specific CiliumNetworkPolicy",
+            description = "Deletes a specific CiliumNetworkPolicy by name in the given namespace. Equivalent to: kubectl delete cnp <policy-name> -n <namespace>"
+    )
+    @APIResponses({
+            @APIResponse(
+                    responseCode = "200",
+                    description = "CiliumNetworkPolicy deleted successfully"
+            ),
+            @APIResponse(
+                    responseCode = "404",
+                    description = "CiliumNetworkPolicy or namespace not found"
+            ),
+            @APIResponse(
+                    responseCode = "500",
+                    description = "Internal server error"
+            )
+    })
+    public Response deleteCiliumNetworkPolicy(
+            @PathParam("name") String name,
+            @QueryParam("namespace") @NotBlank String namespace) {
+        LOG.infof("Received request to delete CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
+
+        try {
+            boolean deleted = ciliumNetworkPolicyService.deleteCiliumNetworkPolicy(name, namespace);
+            
+            if (deleted) {
+                return Response.ok(new DeleteResponse("CiliumNetworkPolicy deleted successfully", name, namespace, 1)).build();
+            } else {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(new ErrorResponse("CiliumNetworkPolicy '" + name + "' not found in namespace '" + namespace + "'"))
+                        .build();
+            }
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Error deleting CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
+            
+            if (e.getMessage().contains("does not exist")) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(new ErrorResponse("Namespace not found: " + e.getMessage()))
+                        .build();
+            }
+            
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse("Failed to delete CiliumNetworkPolicy: " + e.getMessage()))
+                    .build();
+        } catch (Exception e) {
+            LOG.errorf(e, "Unexpected error deleting CiliumNetworkPolicy: %s in namespace: %s", name, namespace);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse("Unexpected error: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    @DELETE
+    @Path("/namespace/{namespace}")
+    @Operation(
+            summary = "Delete all CiliumNetworkPolicies in a namespace",
+            description = "Deletes all CiliumNetworkPolicies in the specified namespace. Equivalent to: kubectl delete cnp -n <namespace> --all"
+    )
+    @APIResponses({
+            @APIResponse(
+                    responseCode = "200",
+                    description = "CiliumNetworkPolicies deleted successfully"
+            ),
+            @APIResponse(
+                    responseCode = "404",
+                    description = "Namespace not found"
+            ),
+            @APIResponse(
+                    responseCode = "500",
+                    description = "Internal server error"
+            )
+    })
+    public Response deleteAllCiliumNetworkPoliciesInNamespace(@PathParam("namespace") String namespace) {
+        LOG.infof("Received request to delete all CiliumNetworkPolicies in namespace: %s", namespace);
+
+        try {
+            int deletedCount = ciliumNetworkPolicyService.deleteAllCiliumNetworkPoliciesInNamespace(namespace);
+            
+            String message = deletedCount > 0
+                    ? "Successfully deleted " + deletedCount + " CiliumNetworkPolicies"
+                    : "No CiliumNetworkPolicies found to delete";
+            
+            return Response.ok(new DeleteResponse(message, null, namespace, deletedCount)).build();
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Error deleting all CiliumNetworkPolicies in namespace: %s", namespace);
+            
+            if (e.getMessage().contains("does not exist")) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(new ErrorResponse("Namespace not found: " + e.getMessage()))
+                        .build();
+            }
+            
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse("Failed to delete CiliumNetworkPolicies: " + e.getMessage()))
+                    .build();
+        } catch (Exception e) {
+            LOG.errorf(e, "Unexpected error deleting all CiliumNetworkPolicies in namespace: %s", namespace);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(new ErrorResponse("Unexpected error: " + e.getMessage()))
                     .build();
@@ -327,6 +437,25 @@ public class CiliumNetworkPolicyResource {
         public HealthResponse(String message, String status) {
             this.message = message;
             this.status = status;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Simple delete response DTO
+     */
+    public static class DeleteResponse {
+        public String message;
+        public String policyName;
+        public String namespace;
+        public int deletedCount;
+        public long timestamp;
+
+        public DeleteResponse(String message, String policyName, String namespace, int deletedCount) {
+            this.message = message;
+            this.policyName = policyName;
+            this.namespace = namespace;
+            this.deletedCount = deletedCount;
             this.timestamp = System.currentTimeMillis();
         }
     }
