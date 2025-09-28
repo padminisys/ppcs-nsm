@@ -421,9 +421,9 @@ class KubernetesServiceMockTest {
     }
 
     @Test
-    void testCreateCiliumNetworkPolicy_WithUserProvidedName_AlreadyExists() {
-        LOG.info("TEST: Creating CiliumNetworkPolicy with user-provided name - Already exists (patching scenario)");
-        LOG.info("Scenario: User provides name of existing policy, should return EXISTS for patching/updating");
+    void testCreateCiliumNetworkPolicy_WithUserProvidedName_AlreadyExists_UpdatesPolicy() {
+        LOG.info("TEST: Creating CiliumNetworkPolicy with user-provided name - Already exists (updating scenario)");
+        LOG.info("Scenario: User provides name of existing policy, should update/patch the existing policy");
         
         // Given
         CiliumNetworkPolicyRequest request = createValidCiliumNetworkPolicyRequest();
@@ -453,6 +453,11 @@ class KubernetesServiceMockTest {
         GenericKubernetesResource existingPolicy = createMockCiliumNetworkPolicy("existing-user-policy", "test-namespace");
         when(customResource.get()).thenReturn(existingPolicy);
         LOG.info("Mock Setup: CiliumNetworkPolicy with user-provided name already exists");
+        
+        // Mock successful update/patch
+        GenericKubernetesResource updatedPolicy = createMockCiliumNetworkPolicy("existing-user-policy", "test-namespace");
+        when(customResourceOp.createOrReplace(any(GenericKubernetesResource.class))).thenReturn(updatedPolicy);
+        LOG.info("Mock Setup: createOrReplace will return updated policy");
 
         // When
         LOG.info("Executing: kubernetesService.createCiliumNetworkPolicy() for existing user-provided name");
@@ -462,17 +467,18 @@ class KubernetesServiceMockTest {
         assertNotNull(response);
         assertEquals("existing-user-policy", response.getName());
         assertEquals("test-namespace", response.getNamespace());
-        assertEquals("EXISTS", response.getStatus());
-        assertEquals("CiliumNetworkPolicy exists - ready for update/patch", response.getMessage());
+        assertEquals("UPDATED", response.getStatus());
+        assertEquals("CiliumNetworkPolicy updated successfully", response.getMessage());
         assertNotNull(response.getCreatedAt());
         assertEquals("existing-user-policy", response.getGeneratedName());
-        LOG.info("✓ Response validation PASSED: Status=EXISTS, ready for patching/updating");
+        LOG.info("✓ Response validation PASSED: Status=UPDATED, policy was successfully updated");
 
-        // Verify interactions - should check existence but not create
+        // Verify interactions - should check existence and then update
         verify(namespaceResource).get();
         verify(customResource).get();
+        verify(customResourceOp).createOrReplace(any(GenericKubernetesResource.class));
         verify(customResourceOp, never()).create(any(GenericKubernetesResource.class));
-        LOG.info("✓ Mock interactions verified: Checked existence but did NOT attempt creation (ready for patch)");
+        LOG.info("✓ Mock interactions verified: Checked existence and performed update/patch operation");
     }
 
     @Test

@@ -191,6 +191,9 @@ public class KubernetesService {
                 throw new RuntimeException("Namespace '" + request.getNamespace() + "' does not exist");
             }
 
+            // Create the CiliumNetworkPolicy resource
+            GenericKubernetesResource ciliumPolicy = createCiliumPolicyResource(request, policyName);
+
             // Check if policy already exists
             GenericKubernetesResource existingPolicy = kubernetesClient
                     .genericKubernetesResources(ciliumNetworkPolicyContext)
@@ -198,40 +201,54 @@ public class KubernetesService {
                     .withName(policyName)
                     .get();
 
+            GenericKubernetesResource resultPolicy;
+            String status;
+            String message;
+
             if (existingPolicy != null) {
                 if (isUserProvidedName) {
-                    // For user-provided names, this enables patching/updating existing policies
-                    LOG.infof("CiliumNetworkPolicy %s already exists in namespace %s - will update/patch", policyName, request.getNamespace());
+                    // For user-provided names, update/patch the existing policy
+                    LOG.infof("CiliumNetworkPolicy %s already exists in namespace %s - updating/patching", policyName, request.getNamespace());
+                    
+                    // Use createOrReplace to update the existing policy
+                    resultPolicy = kubernetesClient
+                            .genericKubernetesResources(ciliumNetworkPolicyContext)
+                            .inNamespace(request.getNamespace())
+                            .createOrReplace(ciliumPolicy);
+                    
+                    status = "UPDATED";
+                    message = "CiliumNetworkPolicy updated successfully";
+                    LOG.infof("Successfully updated CiliumNetworkPolicy: %s in namespace: %s", policyName, request.getNamespace());
                 } else {
                     // For auto-generated names, this should be rare but we handle it
                     LOG.warnf("CiliumNetworkPolicy %s already exists in namespace %s", policyName, request.getNamespace());
+                    return new CiliumNetworkPolicyResponse(
+                            policyName,
+                            request.getNamespace(),
+                            "EXISTS",
+                            Instant.parse(existingPolicy.getMetadata().getCreationTimestamp()),
+                            "CiliumNetworkPolicy already exists",
+                            policyName
+                    );
                 }
-                return new CiliumNetworkPolicyResponse(
-                        policyName,
-                        request.getNamespace(),
-                        "EXISTS",
-                        Instant.parse(existingPolicy.getMetadata().getCreationTimestamp()),
-                        isUserProvidedName ? "CiliumNetworkPolicy exists - ready for update/patch" : "CiliumNetworkPolicy already exists",
-                        policyName
-                );
+            } else {
+                // Create new policy
+                resultPolicy = kubernetesClient
+                        .genericKubernetesResources(ciliumNetworkPolicyContext)
+                        .inNamespace(request.getNamespace())
+                        .create(ciliumPolicy);
+                
+                status = "CREATED";
+                message = "CiliumNetworkPolicy created successfully";
+                LOG.infof("Successfully created CiliumNetworkPolicy: %s in namespace: %s", policyName, request.getNamespace());
             }
 
-            // Create the CiliumNetworkPolicy resource
-            GenericKubernetesResource ciliumPolicy = createCiliumPolicyResource(request, policyName);
-
-            GenericKubernetesResource createdPolicy = kubernetesClient
-                    .genericKubernetesResources(ciliumNetworkPolicyContext)
-                    .inNamespace(request.getNamespace())
-                    .create(ciliumPolicy);
-
-            LOG.infof("Successfully created CiliumNetworkPolicy: %s in namespace: %s", policyName, request.getNamespace());
-
             return new CiliumNetworkPolicyResponse(
-                    createdPolicy.getMetadata().getName(),
-                    createdPolicy.getMetadata().getNamespace(),
-                    "CREATED",
-                    Instant.parse(createdPolicy.getMetadata().getCreationTimestamp()),
-                    "CiliumNetworkPolicy created successfully",
+                    resultPolicy.getMetadata().getName(),
+                    resultPolicy.getMetadata().getNamespace(),
+                    status,
+                    Instant.parse(resultPolicy.getMetadata().getCreationTimestamp()),
+                    message,
                     policyName
             );
 
